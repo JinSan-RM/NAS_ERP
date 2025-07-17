@@ -26,6 +26,7 @@ import Table from '../common/Table';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Card from '../common/Card';
+import Modal from '../common/Modal';
 import Button from '../common/Button';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import PurchaseRequestFilters from './PurchaseRequestFilters';
@@ -166,7 +167,6 @@ const RequestInfo = styled.div`
 `;
 
 const PurchaseRequestPage: React.FC = () => {
-  const queryClient = useQueryClient();
   
   // State
   const [currentPage, setCurrentPage] = useState(1);

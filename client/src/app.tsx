@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ToastContainer } from 'react-toastify';
 import { ThemeProvider } from 'styled-components';
 import { GlobalStyles, theme } from './styles/theme';
-
+import queryClient from './hooks/queryClient';
 // Components - 실제 디렉토리 구조에 맞게 수정
 import Layout from './components/inventory/common/Layout';
 import DashboardPage from './components/dashboard/DashboardPage';  // pages가 아닌 components에 있음
@@ -20,16 +20,7 @@ import LogsPage from './components/logs/LogsPage';
 // Styles
 import 'react-toastify/dist/ReactToastify.css';
 
-// React Query 설정
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 5 * 60 * 1000, // 5분
-    },
-  },
-});
+
 
 const App: React.FC = () => {
   return (
