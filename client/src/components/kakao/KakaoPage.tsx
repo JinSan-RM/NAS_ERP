@@ -1,12 +1,9 @@
-// client/src/components/kakao/KakaoPage.tsx
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { useMutation } from 'react-query';
+import { useMutation } from '@tanstack/react-query';  // react-query → @tanstack/react-query
 import { toast } from 'react-toastify';
 import { MessageSquare, Send, RefreshCw } from 'lucide-react';
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
-import Button from '../common/Button';
+import PageHeader from '../common/Header';
 import { kakaoApi } from '../../services/api';
 
 const Container = styled.div`
@@ -75,7 +72,8 @@ const KakaoPage: React.FC = () => {
   const [message, setMessage] = useState('');
   const [result, setResult] = useState<any>(null);
 
-  const parseMutation = useMutation(kakaoApi.parseMessage, {
+  const parseMutation = useMutation({
+    mutationFn: kakaoApi.parseMessage,  // 최신 문법으로 변경
     onSuccess: (data) => {
       setResult(data.data);
       toast.success('메시지가 성공적으로 파싱되었습니다.');
@@ -117,7 +115,7 @@ const KakaoPage: React.FC = () => {
           <div style={{ display: 'flex', gap: '10px', marginTop: '20px' }}>
             <Button 
               onClick={handleParse}
-              loading={parseMutation.isLoading}
+              loading={parseMutation.isPending}  // isLoading → isPending
               disabled={!message.trim()}
             >
               <Send size={16} />

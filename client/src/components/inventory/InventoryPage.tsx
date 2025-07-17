@@ -1,17 +1,14 @@
 // client/src/components/inventory/InventoryPage.tsx
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+
 import { toast } from 'react-toastify';
 import { Plus, Search, Download, Filter, RefreshCw } from 'lucide-react';
 
 // Components
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
-import Button from '../common/Button';
-import Input from '../common/Input';
+import PageHeader from '../common/Header';
 import Select from '../common/Select';
-import Modal from '../common/Modal';
 import Table from '../common/Table';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';

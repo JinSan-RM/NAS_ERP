@@ -1,12 +1,10 @@
 // client/src/components/upload/UploadPage.tsx
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { useMutation } from 'react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
 import { Upload, FileText, Download } from 'lucide-react';
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
-import Button from '../common/Button';
+import PageHeader from '../common/Header';
 import { uploadApi } from '../../services/api';
 
 const Container = styled.div`

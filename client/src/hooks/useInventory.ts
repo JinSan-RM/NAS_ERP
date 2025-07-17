@@ -1,5 +1,6 @@
 // client/src/hooks/useInventory.ts (수정된 버전)
-import { useQuery, useQueryClient } from 'react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+
 import { inventoryApi } from '../services/api';
 import { SearchFilters } from '../types';
 

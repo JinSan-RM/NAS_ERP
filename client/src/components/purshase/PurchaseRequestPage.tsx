@@ -1,7 +1,8 @@
 // client/src/components/purchase/PurchaseRequestPage.tsx
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+
 import { toast } from 'react-toastify';
 import { 
   Plus, 
@@ -20,10 +21,7 @@ import {
 } from 'lucide-react';
 
 // Components
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
-import Button from '../common/Button';
-import Modal from '../common/Modal';
+import PageHeader from '../common/Header';
 import Table from '../common/Table';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
@@ -37,13 +35,14 @@ import { usePurchaseRequests } from '../../hooks/usePurchaseRequests';
 import { purchaseApi } from '../../services/api';
 
 // Types
+// Types - 경로 수정
 import { 
   PurchaseRequest, 
   SearchFilters, 
   TableColumn, 
   RequestStatus,
   UrgencyLevel 
-} from '../../types';
+} from '../../types';  // ../../types 에서 ../types 로 변경
 import { STATUS_LABELS, URGENCY_LABELS, STATUS_COLORS, URGENCY_COLORS } from '../../types';
 
 const Container = styled.div`

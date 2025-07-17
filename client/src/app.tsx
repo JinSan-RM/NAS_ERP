@@ -1,18 +1,17 @@
-// client/src/App.tsx (수정된 버전)
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from 'react-query';
-import { ReactQueryDevtools } from 'react-query/devtools';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+// import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { ToastContainer } from 'react-toastify';
 import { ThemeProvider } from 'styled-components';
 import { GlobalStyles, theme } from './styles/theme';
 
-// Components
-import Layout from './components/common/Layout';
-import DashboardPage from './components/dashboard/DashboardPage';
+// Components - 실제 디렉토리 구조에 맞게 수정
+import Layout from './components/inventory/common/Layout';
+import DashboardPage from './components/dashboard/DashboardPage';  // pages가 아닌 components에 있음
 import InventoryPage from './components/inventory/InventoryPage';
 import ReceiptPage from './components/receipt/ReceiptPage';
-import PurchaseRequestPage from './components/purchase/PurchaseRequestPage';
+import PurchaseRequestPage from './components/purshase/PurchaseRequestPage';  // purshase (오타) 폴더명 그대로
 import KakaoPage from './components/kakao/KakaoPage';
 import UploadPage from './components/upload/UploadPage';
 import StatisticsPage from './components/statistics/StatisticsPage';
@@ -70,10 +69,12 @@ const App: React.FC = () => {
           </div>
         </Router>
         
-        {/* React Query DevTools (개발 환경에서만) */}
+        {/* React Query DevTools는 프로덕션에서 제거 */}
+        {/* 
         {import.meta.env.DEV && (
           <ReactQueryDevtools initialIsOpen={false} />
         )}
+        */}
       </ThemeProvider>
     </QueryClientProvider>
   );

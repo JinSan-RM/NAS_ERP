@@ -20,11 +20,14 @@ const PORT = process.env.PORT || 3001;
 // 보안 및 성능 미들웨어
 app.use(helmet({
   contentSecurityPolicy: false, // 개발 환경에서는 비활성화
+  crossOriginEmbedderPolicy: false,
 }));
 app.use(compression());
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: process.env.CLIENT_URL || ['http://localhost:3000', 'http://localhost:5173'],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
 }));
 
 // 기본 미들웨어
@@ -39,10 +42,11 @@ setupRoutes(app);
 
 // 프로덕션에서 React 빌드 파일 서빙
 if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(__dirname, '../../client/dist')));
+  const clientPath = path.join(__dirname, '../../client/dist');
+  app.use(express.static(clientPath));
   
   app.get('*', (req, res) => {
-    res.sendFile(path.join(__dirname, '../../client/dist/index.html'));
+    res.sendFile(path.join(clientPath, 'index.html'));
   });
 }
 
@@ -53,7 +57,8 @@ app.use(errorHandler);
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
-    error: 'Route not found'
+    error: 'Route not found',
+    path: req.originalUrl
   });
 });
 
@@ -63,29 +68,31 @@ const startServer = async () => {
     // 데이터 서비스 초기화
     await DataService.getInstance().initialize();
     
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.info(`=== 종합 ERP 관리 시스템 ===`);
       logger.info(`포트: ${PORT}`);
       logger.info(`환경: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`웹 인터페이스: http://localhost:${PORT}`);
       logger.info('==========================');
     });
+
+    // Graceful shutdown
+    const gracefulShutdown = () => {
+      logger.info('서버를 종료합니다...');
+      server.close(() => {
+        logger.info('서버가 정상적으로 종료되었습니다.');
+        process.exit(0);
+      });
+    };
+
+    process.on('SIGTERM', gracefulShutdown);
+    process.on('SIGINT', gracefulShutdown);
+    
   } catch (error) {
     logger.error('서버 시작 실패:', error);
     process.exit(1);
   }
 };
-
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM 신호 받음. 서버를 종료합니다...');
-  process.exit(0);
-});
-
-process.on('SIGINT', () => {
-  logger.info('SIGINT 신호 받음. 서버를 종료합니다...');
-  process.exit(0);
-});
 
 // 처리되지 않은 에러 처리
 process.on('unhandledRejection', (reason, promise) => {

@@ -1,7 +1,8 @@
 // client/src/components/dashboard/DashboardPage.tsx
 import React from 'react';
 import styled from 'styled-components';
-import { useQuery } from 'react-query';
+import { useQuery, useMutation } from '@tanstack/react-query';
+
 import { 
   Package, 
   ShoppingCart, 
@@ -12,8 +13,7 @@ import {
   DollarSign,
   AlertTriangle 
 } from 'lucide-react';
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
+import PageHeader from '../common/Header';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { dashboardApi } from '../../services/api';
 

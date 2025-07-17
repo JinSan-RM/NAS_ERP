@@ -1,15 +1,35 @@
 // client/src/services/api.ts
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
-import { 
-  ApiResponse, 
-  PaginatedResponse, 
-  PurchaseRequest, 
-  InventoryItem, 
-  Receipt, 
-  SearchFilters,
-  PurchaseRequestFormData,
-  DashboardStats 
-} from '../types';
+
+// 타입 정의 (간소화된 버전)
+export interface ApiResponse<T = any> {
+  success: boolean;
+  message?: string;
+  data?: T;
+  error?: string;
+  errors?: Record<string, string[]>;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasNext: boolean;
+  hasPrev: boolean;
+}
+
+export interface SearchFilters {
+  search?: string;
+  status?: string;
+  category?: string;
+  department?: string;
+  supplier?: string;
+  urgency?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
 
 // Axios 인스턴스 생성
 const createApiInstance = (): AxiosInstance => {
@@ -72,7 +92,7 @@ const createApiInstance = (): AxiosInstance => {
       // 인증 에러 처리
       if (error.response?.status === 401) {
         localStorage.removeItem('auth_token');
-        window.location.href = '/login';
+        // window.location.href = '/login';
       }
 
       return Promise.reject(error);
@@ -108,34 +128,26 @@ const apiRequest = {
 
 // ==================== 대시보드 API ====================
 export const dashboardApi = {
-  getStats: (): Promise<ApiResponse<DashboardStats>> =>
+  getStats: (): Promise<ApiResponse<any>> =>
     apiRequest.get('/dashboard'),
 };
 
 // ==================== 구매 요청 API ====================
 export const purchaseApi = {
   // 구매 요청 목록 조회
-  getRequests: (page = 1, limit = 20, filters?: SearchFilters): Promise<ApiResponse<PaginatedResponse<PurchaseRequest>>> =>
+  getRequests: (page = 1, limit = 20, filters?: SearchFilters): Promise<ApiResponse<PaginatedResponse<any>>> =>
     apiRequest.get('/purchase-requests', { page, limit, ...filters }),
 
-  // 내 구매 요청 목록
-  getMyRequests: (page = 1, limit = 20, filters?: SearchFilters): Promise<ApiResponse<PaginatedResponse<PurchaseRequest>>> =>
-    apiRequest.get('/purchase-requests/my-requests', { page, limit, ...filters }),
-
-  // 승인 대기 요청 목록
-  getPendingRequests: (page = 1, limit = 20): Promise<ApiResponse<PaginatedResponse<PurchaseRequest>>> =>
-    apiRequest.get('/purchase-requests/pending-approvals', { page, limit }),
-
   // 특정 구매 요청 조회
-  getRequest: (id: number): Promise<ApiResponse<PurchaseRequest>> =>
+  getRequest: (id: number): Promise<ApiResponse<any>> =>
     apiRequest.get(`/purchase-requests/${id}`),
 
   // 구매 요청 생성
-  createRequest: (data: PurchaseRequestFormData): Promise<ApiResponse<PurchaseRequest>> =>
+  createRequest: (data: any): Promise<ApiResponse<any>> =>
     apiRequest.post('/purchase-requests', data),
 
   // 구매 요청 수정
-  updateRequest: (id: number, data: Partial<PurchaseRequestFormData>): Promise<ApiResponse<PurchaseRequest>> =>
+  updateRequest: (id: number, data: any): Promise<ApiResponse<any>> =>
     apiRequest.put(`/purchase-requests/${id}`, data),
 
   // 구매 요청 삭제
@@ -143,23 +155,15 @@ export const purchaseApi = {
     apiRequest.delete(`/purchase-requests/${id}`),
 
   // 구매 요청 승인/거절
-  approveRequest: (params: { requestId: number; action: 'approve' | 'reject'; comments?: string }): Promise<ApiResponse<PurchaseRequest>> =>
+  approveRequest: (params: { requestId: number; action: 'approve' | 'reject'; comments?: string }): Promise<ApiResponse<any>> =>
     apiRequest.post(`/purchase-requests/${params.requestId}/approve`, {
       action: params.action,
       comments: params.comments,
     }),
 
-  // 구매 요청 복사
-  duplicateRequest: (id: number): Promise<ApiResponse<PurchaseRequest>> =>
-    apiRequest.post(`/purchase-requests/${id}/duplicate`),
-
-  // 일괄 승인/거절
-  bulkApprove: (requestIds: number[], action: 'approve' | 'reject', comments?: string): Promise<ApiResponse<void>> =>
-    apiRequest.post('/purchase-requests/bulk/approve', { requestIds, action, comments }),
-
   // 구매 요청 통계
-  getStats: (filters?: { department?: string; dateFrom?: string; dateTo?: string }): Promise<ApiResponse<any>> =>
-    apiRequest.get('/purchase-requests/stats', filters),
+  getStats: (): Promise<ApiResponse<any>> =>
+    apiRequest.get('/purchase-requests/stats'),
 
   // Excel 내보내기
   exportRequests: (filters?: SearchFilters): Promise<Blob> =>
@@ -169,19 +173,19 @@ export const purchaseApi = {
 // ==================== 재고 관리 API ====================
 export const inventoryApi = {
   // 품목 목록 조회
-  getItems: (page = 1, limit = 20, filters?: SearchFilters): Promise<ApiResponse<PaginatedResponse<InventoryItem>>> =>
+  getItems: (page = 1, limit = 20, filters?: SearchFilters): Promise<ApiResponse<PaginatedResponse<any>>> =>
     apiRequest.get('/inventory', { page, limit, ...filters }),
 
   // 특정 품목 조회
-  getItem: (no: number): Promise<ApiResponse<InventoryItem>> =>
+  getItem: (no: number): Promise<ApiResponse<any>> =>
     apiRequest.get(`/inventory/${no}`),
 
   // 품목 생성
-  createItem: (data: Partial<InventoryItem>): Promise<ApiResponse<InventoryItem>> =>
+  createItem: (data: any): Promise<ApiResponse<any>> =>
     apiRequest.post('/inventory', data),
 
   // 품목 수정
-  updateItem: (no: number, data: Partial<InventoryItem>): Promise<ApiResponse<InventoryItem>> =>
+  updateItem: (no: number, data: any): Promise<ApiResponse<any>> =>
     apiRequest.put(`/inventory/${no}`, data),
 
   // 품목 삭제
@@ -189,7 +193,7 @@ export const inventoryApi = {
     apiRequest.delete(`/inventory/${no}`),
 
   // 품목 상태 업데이트
-  updateItemStatus: (no: number, status: string, receivedDate?: string): Promise<ApiResponse<InventoryItem>> =>
+  updateItemStatus: (no: number, status: string, receivedDate?: string): Promise<ApiResponse<any>> =>
     apiRequest.put(`/inventory/${no}/status`, { status, receivedDate }),
 
   // 공급업체 목록
@@ -197,11 +201,11 @@ export const inventoryApi = {
     apiRequest.get('/inventory/suppliers'),
 
   // 품목 검색 자동완성
-  searchItems: (query: string, limit = 10): Promise<ApiResponse<InventoryItem[]>> =>
+  searchItems: (query: string, limit = 10): Promise<ApiResponse<any[]>> =>
     apiRequest.get('/inventory/search', { q: query, limit }),
 
   // 재고 부족 품목
-  getLowStockItems: (threshold = 5): Promise<ApiResponse<InventoryItem[]>> =>
+  getLowStockItems: (threshold = 5): Promise<ApiResponse<any[]>> =>
     apiRequest.get('/inventory/low-stock', { threshold }),
 
   // Excel 내보내기
@@ -212,7 +216,7 @@ export const inventoryApi = {
 // ==================== 수령 관리 API ====================
 export const receiptApi = {
   // 수령 내역 목록
-  getReceipts: (page = 1, limit = 20): Promise<ApiResponse<PaginatedResponse<Receipt>>> =>
+  getReceipts: (page = 1, limit = 20): Promise<ApiResponse<PaginatedResponse<any>>> =>
     apiRequest.get('/receipts', { page, limit }),
 
   // 수령 처리
@@ -221,7 +225,7 @@ export const receiptApi = {
     receivedQuantity: number;
     receiverName: string;
     notes?: string;
-  }): Promise<ApiResponse<Receipt>> =>
+  }): Promise<ApiResponse<any>> =>
     apiRequest.post('/receipts', data),
 
   // Excel 내보내기
@@ -296,25 +300,6 @@ export const logsApi = {
     apiRequest.get('/logs', { page, limit }),
 };
 
-// ==================== 인증 API ====================
-export const authApi = {
-  // 로그인
-  login: (email: string, password: string): Promise<ApiResponse<{ token: string; user: any }>> =>
-    apiRequest.post('/auth/login', { email, password }),
-
-  // 로그아웃
-  logout: (): Promise<ApiResponse<void>> =>
-    apiRequest.post('/auth/logout'),
-
-  // 현재 사용자 정보
-  getCurrentUser: (): Promise<ApiResponse<any>> =>
-    apiRequest.get('/auth/me'),
-
-  // 토큰 새로고침
-  refreshToken: (): Promise<ApiResponse<{ token: string }>> =>
-    apiRequest.post('/auth/refresh'),
-};
-
 // ==================== 유틸리티 함수들 ====================
 export const apiUtils = {
   // 토큰 설정
@@ -348,6 +333,5 @@ export default {
   kakao: kakaoApi,
   statistics: statisticsApi,
   logs: logsApi,
-  auth: authApi,
   utils: apiUtils,
 };

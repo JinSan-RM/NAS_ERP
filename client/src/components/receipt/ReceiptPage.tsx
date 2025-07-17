@@ -1,11 +1,8 @@
-// client/src/components/receipt/ReceiptPage.tsx
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import { useQuery } from 'react-query';
+import { useQuery } from '@tanstack/react-query';  // react-query → @tanstack/react-query
 import { Plus, Search, Download } from 'lucide-react';
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
-import Button from '../common/Button';
+import PageHeader from '../common/Header';
 import Table from '../common/Table';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
@@ -32,13 +29,11 @@ const ActionButtons = styled.div`
 const ReceiptPage: React.FC = () => {
   const [currentPage, setCurrentPage] = useState(1);
   
-  const { data, isLoading, error } = useQuery(
-    ['receipts', currentPage],
-    () => receiptApi.getReceipts(currentPage, 20),
-    {
-      keepPreviousData: true,
-    }
-  );
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['receipts', currentPage],  // 최신 문법으로 변경
+    queryFn: () => receiptApi.getReceipts(currentPage, 20),
+    keepPreviousData: true,
+  });
 
   const columns: TableColumn<Receipt>[] = [
     {

@@ -299,14 +299,9 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
   );
 };
 
-export default RequestDetailModal;상태"
-        value={filters.status || ''}
-        options={statusOptions}
-        onChange={(value) => handleFilterChange('status', value as string)}
-      />
-      
+export default RequestDetailModal;
       <Select
-        placeholder="카테고리"
+        placeholder="카테고리 선택"
         value={filters.category || ''}
         options={categoryOptions}
         onChange={(value) => handleFilterChange('category', value as string)}

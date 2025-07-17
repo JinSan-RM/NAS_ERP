@@ -1,9 +1,9 @@
 // client/src/components/logs/LogsPage.tsx
 import React from 'react';
 import styled from 'styled-components';
-import { useQuery } from 'react-query';
-import PageHeader from '../common/PageHeader';
-import Card from '../common/Card';
+import { useQuery, useMutation } from '@tanstack/react-query';
+
+import PageHeader from '../common/Header';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { logsApi } from '../../services/api';
 

@@ -29,8 +29,7 @@ export default defineConfig({
           vendor: ['react', 'react-dom'],
           router: ['react-router-dom'],
           ui: ['styled-components', 'lucide-react'],
-          charts: ['chart.js', 'react-chartjs-2'],
-          utils: ['axios', 'date-fns', 'react-query'],
+          utils: ['axios', 'date-fns', '@tanstack/react-query'],
         },
       },
     },
@@ -46,6 +45,7 @@ export default defineConfig({
       '@types': resolve(__dirname, 'src/types'),
       '@utils': resolve(__dirname, 'src/utils'),
       '@styles': resolve(__dirname, 'src/styles'),
+      '@store': resolve(__dirname, 'src/store'),
     },
   },
   
@@ -62,7 +62,7 @@ export default defineConfig({
       'react-router-dom',
       'axios',
       'styled-components',
-      'react-query',
+      '@tanstack/react-query',
     ],
   },
 });
