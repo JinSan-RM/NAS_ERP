@@ -1,6 +1,10 @@
 // client/src/components/inventory/InventoryForm.tsx
 import React, { useState } from 'react';
 import styled from 'styled-components';
+import Card from '../common/Card';
+import Button from '../common/Button';
+import Input from '../common/Input';
+import Select from '../common/Select';
 
 const FormContainer = styled.div`
   background: white;

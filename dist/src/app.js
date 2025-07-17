@@ -62,7 +62,7 @@ const startServer = async () => {
         // 데이터 서비스 초기화
         await dataService_1.DataService.getInstance().initialize();
         const server = app.listen(PORT, () => {
-            logger.info(`=== 종합 ERP 관리 시스템 ===`);
+            logger.info(`=== 구매 관리 서비스 ===`);
             logger.info(`포트: ${PORT}`);
             logger.info(`환경: ${process.env.NODE_ENV || 'development'}`);
             logger.info(`웹 인터페이스: http://localhost:${PORT}`);

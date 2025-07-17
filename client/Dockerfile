@@ -2,29 +2,24 @@ FROM node:20-alpine AS build
 
 WORKDIR /app
 
-# Copy package files
+# 소스 코드 복사 및 빌드
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
 
-# Copy source code
-COPY . ./
-
-# Build the app
+COPY . .
 RUN npm run build
 
-# Production stage
-FROM nginx:alpine AS production
+FROM nginx:alpine
 
-# Copy built app to nginx
-COPY --from=build /app/dist /usr/share/nginx/html
-
-# Copy custom nginx configuration
+# Nginx 설정 파일 복사
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Expose port
+# 빌드된 파일을 Nginx의 서비스 디렉토리로 복사
+COPY --from=build /app/dist /usr/share/nginx/html
+
+# 로그 디렉토리 생성
+RUN mkdir -p /var/log/nginx
+
 EXPOSE 80
 
-# Start nginx
 CMD ["nginx", "-g", "daemon off;"]

@@ -80,7 +80,13 @@ export class InventoryController {
   // 품목 생성
   async createItem(req: Request, res: Response, next: NextFunction) {
     try {
-      const itemData: CreateInventoryRequest = req.body;
+      const itemData: CreateInventoryRequest = {
+        ...req.body,
+        specifications: req.body.specifications || '',  // 빈 문자열을 기본값으로 설정
+        totalPrice: req.body.quantity * req.body.unitPrice,
+        received: false,
+        status: 'pending'
+      };
       
       const newItem = await inventoryService.createItem(itemData);
       

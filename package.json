@@ -25,6 +25,7 @@
     "docker:logs": "docker-compose logs -f"
   },
   "devDependencies": {
+    "@types/express": "^5.0.3",
     "concurrently": "^8.2.0"
   },
   "keywords": [

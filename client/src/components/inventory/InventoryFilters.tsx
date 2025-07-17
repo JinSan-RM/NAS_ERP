@@ -2,6 +2,10 @@
 import React from 'react';
 import styled from 'styled-components';
 import { Search, Filter } from 'lucide-react';
+import Card from '../common/Card';
+import Button from '../common/Button';
+import Input from '../common/Input';
+import Select from '../common/Select';
 
 const FilterContainer = styled.div`
   display: flex;

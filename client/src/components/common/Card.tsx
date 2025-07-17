@@ -1,4 +1,3 @@
-// client/src/components/common/Card.tsx
 import React from 'react';
 import styled from 'styled-components';
 
@@ -25,12 +24,25 @@ const CardContainer = styled.div<{ padding?: string; hover?: boolean }>`
   `}
 `;
 
-const Card: React.FC<CardProps> = ({ children, className, padding, hover = false }) => {
+const Card = React.forwardRef<HTMLDivElement, CardProps>(({ 
+  children, 
+  className, 
+  padding,
+  hover = false 
+}, ref) => {
   return (
-    <CardContainer className={className} padding={padding} hover={hover}>
+    <CardContainer 
+      ref={ref}
+      className={className} 
+      padding={padding} 
+      hover={hover}
+    >
       {children}
     </CardContainer>
   );
-};
+});
 
+Card.displayName = 'Card';
+
+export type { CardProps };
 export default Card;

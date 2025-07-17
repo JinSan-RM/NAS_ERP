@@ -1,9 +1,8 @@
-// client/src/index.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './app';
-
-// Global styles
+import { ThemeProvider } from 'styled-components';
+import { theme, GlobalStyles } from './styles/theme';
+import App from './App.tsx';  // 확장자 명시
 import './styles/globals.css';
 
 const root = ReactDOM.createRoot(
@@ -12,6 +11,9 @@ const root = ReactDOM.createRoot(
 
 root.render(
   <React.StrictMode>
-    <App />
+    <ThemeProvider theme={theme}>
+      <GlobalStyles />
+      <App />
+    </ThemeProvider>
   </React.StrictMode>
 );

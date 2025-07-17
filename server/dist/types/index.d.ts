@@ -41,15 +41,18 @@ export interface InventoryItem {
 }
 export interface CreateInventoryRequest {
     itemName: string;
-    specifications?: string;
+    specifications: string;
     quantity: number;
     unitPrice: number;
+    totalPrice: number;
     supplier: string;
     category: ItemCategory;
     urgency: string;
     department: string;
     purchaseMethod: string;
     requesterId: string;
+    received: boolean;
+    status: string;
 }
 export interface UpdateInventoryRequest {
     itemName?: string;

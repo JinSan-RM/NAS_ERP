@@ -2,7 +2,8 @@
 import React from 'react';
 import styled from 'styled-components';
 import { useQuery, useMutation } from '@tanstack/react-query';
-
+import Card from '../common/Card';
+import Button from '../common/Button';
 import PageHeader from '../common/Header';
 import LoadingSpinner from '../common/LoadingSpinner';
 import { logsApi } from '../../services/api';

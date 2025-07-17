@@ -1,6 +1,7 @@
-// server/src/controllers/receiptController.ts
+import { Request, Response, NextFunction } from 'express';
+
 export class ReceiptController {
   async getReceipts(req: Request, res: Response, next: NextFunction) {
-    res.json({ success: true, data: [] });
+    return res.json({ success: true, data: [] });
   }
 }

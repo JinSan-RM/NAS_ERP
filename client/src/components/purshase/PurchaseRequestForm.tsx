@@ -4,6 +4,8 @@ import styled from 'styled-components';
 import { useMutation } from '@tanstack/react-query';  // react-query → @tanstack/react-query
 import { toast } from 'react-toastify';
 import Select from '../common/Select';
+import Card from '../common/Card';
+import Button from '../common/Button';
 import { purchaseApi } from '../../services/api';
 import { PurchaseRequest, ItemCategory, UrgencyLevel, PurchaseMethod, PurchaseRequestFormData } from '../../types';
 import { CATEGORY_LABELS, URGENCY_LABELS } from '../../types';

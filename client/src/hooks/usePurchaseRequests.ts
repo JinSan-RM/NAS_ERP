@@ -1,59 +1,40 @@
-// client/src/hooks/usePurchaseRequests.ts (수정된 버전)
-import { useQuery, useMutation } from '@tanstack/react-query';
-
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { purchaseApi } from '../services/api';
-import { SearchFilters } from '../types';
+import { PurchaseRequest, SearchFilters } from '../types';
 
-export const usePurchaseRequests = (
-  page: number = 1,
-  limit: number = 20,
-  filters: SearchFilters = {}
-) => {
+export const usePurchaseRequests = (page: number, limit: number, filters: SearchFilters = {}) => {
   const queryClient = useQueryClient();
 
   const {
     data,
-    isLoading: loading,
+    isLoading,
     error,
     refetch
   } = useQuery(
     ['purchase-requests', page, limit, filters],
-    () => purchaseApi.getRequests(page, limit, filters),
+    () => purchaseApi.getRequests({ page, limit, ...filters }),
     {
       keepPreviousData: true,
-      staleTime: 5 * 60 * 1000,
+      staleTime: 5 * 60 * 1000
     }
   );
 
-  // 통계 데이터 조회
-  const { data: statsData } = useQuery(
-    ['purchase-requests-stats'],
-    () => purchaseApi.getStats(),
-    {
-      staleTime: 10 * 60 * 1000,
+  // 다음 페이지 프리페칭
+  React.useEffect(() => {
+    if (data?.hasNextPage) {
+      queryClient.prefetchQuery(
+        ['purchase-requests', page + 1, limit, filters],
+        () => purchaseApi.getRequests({ page: page + 1, limit, ...filters })
+      );
     }
-  );
+  }, [data, page, limit, filters, queryClient]);
 
   return {
-    requests: data?.data?.items || [],
-    total: data?.data?.total || 0,
-    totalPages: data?.data?.totalPages || 0,
-    hasNext: data?.data?.hasNext || false,
-    hasPrev: data?.data?.hasPrev || false,
-    stats: statsData?.data || {
-      total: 0,
-      pending: 0,
-      approved: 0,
-      rejected: 0,
-      thisMonth: 0,
-      lastMonth: 0,
-    },
-    loading,
+    requests: data?.items || [],
+    totalPages: data?.totalPages || 0,
+    totalItems: data?.totalItems || 0,
+    loading: isLoading,
     error,
-    refetch,
-    invalidate: () => {
-      queryClient.invalidateQueries('purchase-requests');
-      queryClient.invalidateQueries('purchase-requests-stats');
-    }
+    refetch
   };
 };

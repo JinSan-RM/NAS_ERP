@@ -4,6 +4,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import compression from 'compression';
 import path from 'path';
+import fs from 'fs';
 import { config } from 'dotenv';
 import { createLogger } from './utils/logger';
 import { errorHandler } from './middleware/errorHandler';
@@ -40,13 +41,51 @@ app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 // API 라우트 설정
 setupRoutes(app);
 
-// 프로덕션에서 React 빌드 파일 서빙
+// 프로덕션에서 React 빌드 파일 서빙 (안전한 경로 체크 추가)
 if (process.env.NODE_ENV === 'production') {
-  const clientPath = path.join(__dirname, '../../client/dist');
-  app.use(express.static(clientPath));
+  const clientPath = path.join(__dirname, '../client/dist');
+  const indexPath = path.join(clientPath, 'index.html');
   
-  app.get('*', (req, res) => {
-    res.sendFile(path.join(clientPath, 'index.html'));
+  // 클라이언트 파일이 존재하는지 확인
+  if (fs.existsSync(clientPath) && fs.existsSync(indexPath)) {
+    app.use(express.static(clientPath));
+    
+    app.get('*', (req, res) => {
+      res.sendFile(indexPath);
+    });
+    
+    logger.info(`클라이언트 파일 서빙: ${clientPath}`);
+  } else {
+    logger.warn(`클라이언트 파일을 찾을 수 없습니다: ${clientPath}`);
+    logger.warn('API 서버만 실행됩니다.');
+    
+    // 클라이언트 파일이 없을 때 루트 경로 처리
+    app.get('/', (req, res) => {
+      res.json({
+        success: true,
+        message: '재고 관리 시스템 API 서버가 실행 중입니다.',
+        version: '1.0.0',
+        note: '클라이언트 파일이 없어 API 서버만 실행됩니다.',
+        endpoints: {
+          health: '/api/health',
+          inventory: '/api/inventory'
+        }
+      });
+    });
+  }
+} else {
+  // 개발 환경에서 루트 경로 처리
+  app.get('/', (req, res) => {
+    res.json({
+      success: true,
+      message: '재고 관리 시스템 API 서버가 실행 중입니다.',
+      version: '1.0.0',
+      environment: 'development',
+      endpoints: {
+        health: '/api/health',
+        inventory: '/api/inventory'
+      }
+    });
   });
 }
 
@@ -58,7 +97,12 @@ app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
     error: 'Route not found',
-    path: req.originalUrl
+    path: req.originalUrl,
+    availableRoutes: [
+      '/api/health',
+      '/api/inventory',
+      '/'
+    ]
   });
 });
 
@@ -69,10 +113,11 @@ const startServer = async () => {
     await DataService.getInstance().initialize();
     
     const server = app.listen(PORT, () => {
-      logger.info(`=== 종합 ERP 관리 시스템 ===`);
+      logger.info(`=== 구매 관리 서비스 ===`);
       logger.info(`포트: ${PORT}`);
       logger.info(`환경: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`웹 인터페이스: http://localhost:${PORT}`);
+      logger.info(`API 서버: http://localhost:${PORT}`);
+      logger.info(`Health Check: http://localhost:${PORT}/api/health`);
       logger.info('==========================');
     });
 

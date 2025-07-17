@@ -5,6 +5,8 @@ import { toast } from 'react-toastify';
 import { MessageSquare, Send, RefreshCw } from 'lucide-react';
 import PageHeader from '../common/Header';
 import { kakaoApi } from '../../services/api';
+import Card from '../common/Card';
+import Button from '../common/Button';
 
 const Container = styled.div`
   padding: 20px;

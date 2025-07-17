@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { Edit, Check, Eye, Calendar, User, Package, DollarSign } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
+import Select from '../common/Select';
 import { PurchaseRequest } from '../../types';
 import { STATUS_LABELS, URGENCY_LABELS, CATEGORY_LABELS } from '../../types';
 
@@ -300,9 +301,3 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
 };
 
 export default RequestDetailModal;
-      <Select
-        placeholder="카테고리 선택"
-        value={filters.category || ''}
-        options={categoryOptions}
-        onChange={(value) => handleFilterChange('category', value as string)}
-      />

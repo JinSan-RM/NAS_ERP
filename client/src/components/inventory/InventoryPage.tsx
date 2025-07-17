@@ -10,6 +10,8 @@ import { Plus, Search, Download, Filter, RefreshCw } from 'lucide-react';
 import PageHeader from '../common/Header';
 import Select from '../common/Select';
 import Table from '../common/Table';
+import Button from '../common/Button';
+import Card from '../common/Card';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
 import InventoryForm from './InventoryForm';

@@ -15,6 +15,10 @@ import {
 } from 'lucide-react';
 import PageHeader from '../common/Header';
 import LoadingSpinner from '../common/LoadingSpinner';
+import Card from '../common/Card';
+import Button from '../common/Button';
+import Input from '../common/Input';
+import Select from '../common/Select';
 import { dashboardApi } from '../../services/api';
 
 const Container = styled.div`
@@ -28,7 +32,7 @@ const StatsGrid = styled.div`
   margin-bottom: 30px;
 `;
 
-const StatCard = styled(Card)<{ color: string }>`
+const StatCard = styled(Card as any)<{ color: string }>`
   background: linear-gradient(135deg, ${props => props.color}15 0%, ${props => props.color}05 100%);
   border-left: 4px solid ${props => props.color};
   

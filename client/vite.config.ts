@@ -9,7 +9,7 @@ export default defineConfig({
   // 개발 서버 설정
   server: {
     host: '0.0.0.0',
-    port: 3000,
+    port: 3001,
     proxy: {
       '/api': {
         target: 'http://localhost:3001',
@@ -47,6 +47,7 @@ export default defineConfig({
       '@styles': resolve(__dirname, 'src/styles'),
       '@store': resolve(__dirname, 'src/store'),
     },
+    extensions: ['.js', '.jsx', '.ts', '.tsx']  // 확장자 해결을 위해 추가
   },
   
   // 환경변수 설정

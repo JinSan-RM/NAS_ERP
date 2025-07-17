@@ -279,14 +279,6 @@ docker stats
 - Docker 로그: `docker-compose logs`
 - 시놀로지 시스템 로그: DSM → 로그 센터
 
-## 📞 지원 및 기여
-
-### 문제 신고
-문제 발생 시 다음 정보와 함께 이슈 생성:
-1. 시놀로지 모델 및 DSM 버전
-2. Docker 버전 (`docker --version`)
-3. 오류 로그 (`docker-compose logs`)
-4. 재현 단계
 
 ### 개발 환경 설정
 ```bash
@@ -300,9 +292,6 @@ cd client && npm run dev
 cd server && npm run dev
 ```
 
-## 📄 라이선스
-
-MIT License - 자유롭게 사용, 수정, 배포 가능
 
 ## 🔄 버전 히스토리
 
@@ -315,5 +304,3 @@ MIT License - 자유롭게 사용, 수정, 배포 가능
   - 반응형 웹 인터페이스
 
 ---
-
-**🎯 시놀로지 NAS에서 안정적인 ERP 시스템을 구축하세요!**

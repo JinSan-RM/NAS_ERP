@@ -5,6 +5,7 @@ import { Filter } from 'lucide-react';
 import Input from '../common/Input';
 import Select from '../common/Select';
 import Button from '../common/Button';
+import Card from '../common/Card';
 import { SearchFilters, RequestStatus, UrgencyLevel } from '../../types';
 import { STATUS_LABELS, URGENCY_LABELS } from '../../types';
 

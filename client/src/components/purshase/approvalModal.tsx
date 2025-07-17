@@ -4,6 +4,7 @@ import styled from 'styled-components';
 import { Check, X, AlertTriangle } from 'lucide-react';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
+import Card from '../common/Card';
 import { PurchaseRequest } from '../../types';
 
 interface ApprovalModalProps {
