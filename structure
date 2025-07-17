@@ -1,0 +1,75 @@
+// 프로젝트 구조
+inventory-system-ts/
+├── server/                          # Backend (Node.js + TypeScript)
+│   ├── src/
+│   │   ├── controllers/
+│   │   │   ├── dashboardController.ts
+│   │   │   ├── inventoryController.ts
+│   │   │   ├── receiptController.ts
+│   │   │   └── uploadController.ts
+│   │   ├── middleware/
+│   │   │   ├── auth.ts
+│   │   │   ├── validation.ts
+│   │   │   └── errorHandler.ts
+│   │   ├── models/
+│   │   │   ├── Inventory.ts
+│   │   │   ├── Receipt.ts
+│   │   │   └── PurchaseRequest.ts
+│   │   ├── routes/
+│   │   │   ├── api.ts
+│   │   │   └── index.ts
+│   │   ├── services/
+│   │   │   ├── excelService.ts
+│   │   │   ├── kakaoService.ts
+│   │   │   └── dataService.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   ├── utils/
+│   │   │   └── logger.ts
+│   │   └── app.ts
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── Dockerfile
+├── client/                          # Frontend (React + TypeScript)
+│   ├── public/
+│   │   └── index.html
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── common/
+│   │   │   │   ├── Header.tsx
+│   │   │   │   ├── Sidebar.tsx
+│   │   │   │   ├── Loading.tsx
+│   │   │   │   └── Modal.tsx
+│   │   │   ├── dashboard/
+│   │   │   │   ├── DashboardPage.tsx
+│   │   │   │   └── StatsCard.tsx
+│   │   │   ├── inventory/
+│   │   │   │   ├── InventoryPage.tsx
+│   │   │   │   ├── InventoryTable.tsx
+│   │   │   │   └── InventoryForm.tsx
+│   │   │   ├── receipt/
+│   │   │   │   ├── ReceiptPage.tsx
+│   │   │   │   └── ReceiptForm.tsx
+│   │   │   └── kakao/
+│   │   │       ├── KakaoPage.tsx
+│   │   │       └── MessageParser.tsx
+│   │   ├── hooks/
+│   │   │   ├── useApi.ts
+│   │   │   ├── useInventory.ts
+│   │   │   └── useReceipt.ts
+│   │   ├── services/
+│   │   │   └── api.ts
+│   │   ├── types/
+│   │   │   └── index.ts
+│   │   ├── utils/
+│   │   │   ├── formatters.ts
+│   │   │   └── validators.ts
+│   │   ├── styles/
+│   │   │   └── globals.css
+│   │   ├── App.tsx
+│   │   └── index.tsx
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── Dockerfile
+├── docker-compose.yml
+└── README.md
