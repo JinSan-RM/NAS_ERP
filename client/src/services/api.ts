@@ -1,14 +1,17 @@
 // client/src/services/api.ts
+
 import axios, { AxiosInstance, AxiosResponse, AxiosError } from 'axios';
-import { 
-  ApiResponse, 
-  PaginatedResponse, 
-  SearchFilters, 
+
+import {
+  ApiResponse,
+  PaginatedResponse,
   PurchaseRequest,
   PurchaseRequestFormData,
   PurchaseRequestStats,
-  ApprovalRequest
-} from '../types';
+  ApprovalRequest,
+  SearchFilters
+} from '@types';
+
 
 // Axios 인스턴스 생성
 const createApiInstance = (): AxiosInstance => {
@@ -456,4 +459,17 @@ export default {
 };
 
 // Named exports for convenience
-export { SearchFilters };
+export interface SearchFilters {
+  search?: string;
+  status?: string;
+  category?: string;
+  department?: string;
+  supplier?: string;
+  urgency?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  is_active?: boolean;
+  min_budget?: number;
+  max_budget?: number;
+  requester_name?: string;
+}
