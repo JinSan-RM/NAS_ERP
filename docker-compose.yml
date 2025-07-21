@@ -1,30 +1,79 @@
+version: '3.8'
+
 services:
-  # Backend API 서버
+  # PostgreSQL 데이터베이스
+  postgres:
+    image: postgres:15-alpine
+    container_name: inventory-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: inventory_db
+      POSTGRES_USER: inventory_user
+      POSTGRES_PASSWORD: inventory_password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./logs/postgres:/var/log/postgresql
+    networks:
+      - inventory-network
+    # 시놀로지 NAS 최적화 설정
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.3'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inventory_user -d inventory_db"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # Backend API 서버 (Python FastAPI)
   api-server:
     build:
       context: ./server
       dockerfile: Dockerfile
-      target: production
     container_name: inventory-api
+    restart: unless-stopped
     ports:
-      - "3001:3001"
+      - "8000:8000"
     volumes:
       - ./uploads:/app/uploads
-      - ./data:/app/data
-      - ./logs:/app/logs
-      - ./client/dist:/app/client/dist
+      - ./logs/api:/app/logs
     environment:
-      - NODE_ENV=production
-      - PORT=3001
-      - CLIENT_URL=http://localhost:3001
-      - JWT_SECRET=your_jwt_secret_here_change_in_production
-      - SESSION_SECRET=your_session_secret_here_change_in_production
-      - LOG_LEVEL=info
-      - MAX_FILE_SIZE=50MB
-      - UPLOAD_PATH=./uploads
-    restart: unless-stopped
+      # 앱 설정
+      - PROJECT_NAME=Inventory Management System
+      - VERSION=1.0.0
+      - DEBUG=false
+      - HOST=0.0.0.0
+      - PORT=8000
+      - WATCHFILES_FORCE_POLLING=true  # 파일 변경 감지 강제
+      # 데이터베이스 설정
+      - DATABASE_URL=postgresql://inventory_user:inventory_password@postgres:5432/inventory_db
+      
+      # 보안 설정
+      - SECRET_KEY=your-super-secret-key-change-this-in-production
+      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+      
+      # CORS 설정
+      - ALLOWED_HOSTS=["http://localhost", "http://localhost:80", "http://localhost:3001"]
+      
+      # 파일 업로드 설정
+      - UPLOAD_DIR=/app/uploads
+      - MAX_FILE_SIZE=52428800  # 50MB
+      - ALLOWED_FILE_TYPES=[".xlsx", ".xls", ".csv"]
+    depends_on:
+      postgres:
+        condition: service_healthy
     networks:
       - inventory-network
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
     # 시놀로지 NAS 최적화 설정
     deploy:
       resources:
@@ -35,7 +84,7 @@ services:
           memory: 256M
           cpus: '0.25'
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -47,14 +96,20 @@ services:
       context: ./client
       dockerfile: Dockerfile
     container_name: inventory-web
+    restart: unless-stopped
     ports:
       - "80:80"
+      - "443:443"  # HTTPS 지원 (선택사항)
     volumes:
       - ./client/dist:/usr/share/nginx/html
       - ./logs/nginx:/var/log/nginx
+      # - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro  # 커스텀 nginx 설정
     environment:
-      - VITE_API_URL=http://localhost:3001/api
-    restart: unless-stopped
+      - VITE_API_URL=http://localhost:8000/api/v1
+      - VITE_APP_TITLE=Inventory Management System
+    depends_on:
+      api-server:
+        condition: service_healthy
     networks:
       - inventory-network
     deploy:
@@ -65,16 +120,61 @@ services:
         reservations:
           memory: 64M
           cpus: '0.1'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # pgAdmin (데이터베이스 관리 - 선택사항)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: inventory-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@inventory.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+      - ./logs/pgadmin:/var/log/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - inventory-network
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.2'
+        reservations:
+          memory: 128M
+          cpus: '0.1'
+    profiles:
+      - tools  # 선택적 서비스 (docker-compose --profile tools up)
 
 volumes:
-  # 데이터 지속성을 위한 볼륨
-  inventory_data:
+  # PostgreSQL 데이터
+  postgres_data:
     driver: local
     driver_opts:
       type: none
       o: bind
-      device: ./data
+      device: ./data/postgres
+
+  # pgAdmin 데이터
+  pgadmin_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ./data/pgadmin
       
+  # 업로드 파일
   inventory_uploads:
     driver: local
     driver_opts:
@@ -82,6 +182,7 @@ volumes:
       o: bind
       device: ./uploads
       
+  # 로그 파일
   inventory_logs:
     driver: local
     driver_opts:
@@ -92,9 +193,25 @@ volumes:
 networks:
   inventory-network:
     driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.20.0.0/16
 
 # 사용법:
 # 1. 시놀로지 NAS에서 SSH 접속
 # 2. 프로젝트 디렉토리로 이동
-# 3. docker-compose up -d 실행
-# 4. http://nas-ip 로 접속
+# 3. 필요한 디렉토리 생성: mkdir -p {data/postgres,data/pgadmin,uploads,logs/{api,nginx,postgres,pgadmin}}
+# 4. 환경변수 설정: cp backend/.env.example backend/.env && cp client/.env.example client/.env
+# 5. 서비스 시작: docker-compose up -d
+# 6. 로그 확인: docker-compose logs -f
+# 7. 접속:
+#    - 메인 앱: http://nas-ip
+#    - API 문서: http://nas-ip:8000/docs
+#    - pgAdmin: http://nas-ip:5050 (선택사항)
+
+# 개발용 실행:
+# docker-compose --profile tools up -d  (pgAdmin 포함)
+
+# 프로덕션용 실행:
+# docker-compose up -d  (pgAdmin 제외)

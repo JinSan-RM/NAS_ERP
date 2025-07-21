@@ -7,7 +7,11 @@ from app.api.v1.api import api_router
 from app.core.database import engine, Base
 
 # 데이터베이스 테이블 생성
-Base.metadata.create_all(bind=engine)
+try:
+    Base.metadata.create_all(bind=engine)
+    print("✅ 데이터베이스 테이블 생성 완료")
+except Exception as e:
+    print(f"⚠️ 데이터베이스 연결 오류: {e}")
 
 app = FastAPI(
     title="Inventory Management System",
@@ -26,7 +30,7 @@ app.add_middleware(
 )
 
 # Trusted Host 미들웨어
-if settings.TRUSTED_HOSTS:
+if hasattr(settings, 'TRUSTED_HOSTS') and settings.TRUSTED_HOSTS:
     app.add_middleware(
         TrustedHostMiddleware, 
         allowed_hosts=settings.TRUSTED_HOSTS
@@ -40,12 +44,14 @@ async def root():
     return {
         "message": "Inventory Management System API",
         "version": "1.0.0",
-        "status": "running"
+        "status": "running",
+        "docs": "/docs",
+        "redoc": "/redoc"
     }
 
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy"}
+    return {"status": "healthy", "service": "inventory-api"}
 
 if __name__ == "__main__":
     import uvicorn

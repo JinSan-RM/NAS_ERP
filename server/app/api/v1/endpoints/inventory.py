@@ -3,8 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app import crud, schemas
-from app.api import deps
-from app.core.database import get_db
+from app.api.deps import get_db
 
 router = APIRouter()
 
@@ -32,7 +31,7 @@ def read_inventories(
         "total": total,
         "page": skip // limit + 1,
         "size": limit,
-        "pages": (total + limit - 1) // limit
+        "pages": (total + limit - 1) // limit if total > 0 else 0
     }
 
 @router.post("/", response_model=schemas.Inventory)
