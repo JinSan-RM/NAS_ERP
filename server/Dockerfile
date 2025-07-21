@@ -1,42 +1,30 @@
-# Build stage
-FROM node:18-alpine AS builder
+FROM python:3.11-slim
 
+# 작업 디렉토리 설정
 WORKDIR /app
 
-# 패키지 파일 복사 및 의존성 설치
-COPY package*.json ./
-RUN npm ci
+# 시스템 의존성 설치
+RUN apt-get update && apt-get install -y \
+    gcc \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
-# TypeScript 및 필요한 dev 의존성 설치
-RUN npm install typescript @types/node @types/express
+# Python 의존성 설치
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# 소스 코드 복사 및 빌드
+# 애플리케이션 코드 복사
 COPY . .
-RUN npm run build
 
-# Production stage
-FROM node:18-alpine AS production
+# 업로드 디렉토리 생성
+RUN mkdir -p uploads logs
 
-WORKDIR /app
+# 포트 노출
+EXPOSE 8000
 
-# 프로덕션 의존성만 설치
-COPY package*.json ./
-RUN npm ci --only=production
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD python -c "import requests; requests.get('http://localhost:8000/health')"
 
-# 빌드된 파일 복사
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/package.json ./
-
-# 필요한 디렉토리 생성
-RUN mkdir -p /app/client/dist /app/uploads /app/logs \
-    && chown -R node:node /app
-
-# 보안을 위해 non-root 유저로 전환
-USER node
-
-EXPOSE 3001
-
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3001/api/health || exit 1
-
-CMD ["npm", "start"]
+# 애플리케이션 실행
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
