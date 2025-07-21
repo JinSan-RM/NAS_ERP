@@ -1,8 +1,14 @@
-// client/src/hooks/useInventory.ts (수정된 버전)
-import { useQuery, useMutation } from '@tanstack/react-query';
-
+// client/src/hooks/useInventory.ts
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryApi } from '../services/api';
 import { SearchFilters } from '../types';
+
+interface InventoryStats {
+  totalItems: number;
+  lowStockItems: number;
+  outOfStockItems: number;
+  totalValue: number;
+}
 
 export const useInventory = (
   page: number = 1,
@@ -16,32 +22,44 @@ export const useInventory = (
     isLoading: loading,
     error,
     refetch
-  } = useQuery(
-    ['inventory', page, limit, filters],
-    () => inventoryApi.getItems(page, limit, filters),
-    {
-      keepPreviousData: true,
-      staleTime: 5 * 60 * 1000,
-    }
-  );
+  } = useQuery({
+    queryKey: ['inventory', page, limit, filters],
+    queryFn: () => inventoryApi.getItems(page, limit, filters),
+    keepPreviousData: true,
+    staleTime: 5 * 60 * 1000,
+    retry: 3,
+  });
+
+  // 통계 데이터 조회
+  const { data: statsData } = useQuery({
+    queryKey: ['inventory-stats'],
+    queryFn: () => inventoryApi.getStats(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const items = data?.data?.items || [];
+  const totalPages = data?.data?.pages || 0;
+  const total = data?.data?.total || 0;
+  const stats = statsData?.data || {};
 
   return {
-    items: data?.data?.items || [],
-    total: data?.data?.total || 0,
-    totalPages: data?.data?.totalPages || 0,
-    hasNext: data?.data?.hasNext || false,
-    hasPrev: data?.data?.hasPrev || false,
+    items,
+    total,
+    totalPages,
+    hasNext: page < totalPages,
+    hasPrev: page > 1,
     stats: {
-      totalItems: data?.data?.items?.length || 0,
-      receivedItems: data?.data?.items?.filter(item => item.received)?.length || 0,
-      pendingItems: data?.data?.items?.filter(item => !item.received)?.length || 0,
-      totalValue: data?.data?.items?.reduce((sum, item) => sum + item.totalPrice, 0) || 0,
-    },
+      totalItems: stats.total_items || items.length,
+      lowStockItems: stats.low_stock_items || 0,
+      outOfStockItems: stats.out_of_stock_items || 0,
+      totalValue: stats.total_value || 0,
+    } as InventoryStats,
     loading,
     error,
     refetch,
     invalidate: () => {
-      queryClient.invalidateQueries('inventory');
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
     }
   };
 };

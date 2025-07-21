@@ -1,28 +1,35 @@
 // client/src/components/dashboard/DashboardPage.tsx
 import React from 'react';
 import styled from 'styled-components';
-import { useQuery, useMutation } from '@tanstack/react-query';
-
+import { useQuery } from '@tanstack/react-query';
 import { 
   Package, 
   ShoppingCart, 
   CheckCircle, 
   Clock, 
-  TrendingUp, 
-  Users, 
   DollarSign,
   AlertTriangle 
 } from 'lucide-react';
-import PageHeader from '../common/Header';
-import LoadingSpinner from '../common/LoadingSpinner';
 import Card from '../common/Card';
 import Button from '../common/Button';
-import Input from '../common/Input';
-import Select from '../common/Select';
+import LoadingSpinner from '../common/LoadingSpinner';
 import { dashboardApi } from '../../services/api';
 
 const Container = styled.div`
   padding: 20px;
+`;
+
+const PageTitle = styled.h1`
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: ${props => props.theme.colors.text};
+`;
+
+const PageSubtitle = styled.p`
+  color: ${props => props.theme.colors.textSecondary};
+  margin-bottom: 30px;
+  font-size: 1rem;
 `;
 
 const StatsGrid = styled.div`
@@ -32,7 +39,7 @@ const StatsGrid = styled.div`
   margin-bottom: 30px;
 `;
 
-const StatCard = styled(Card as any)<{ color: string }>`
+const StatCard = styled(Card)<{ color: string }>`
   background: linear-gradient(135deg, ${props => props.color}15 0%, ${props => props.color}05 100%);
   border-left: 4px solid ${props => props.color};
   
@@ -198,63 +205,70 @@ const QuickActions = styled(Card)`
 `;
 
 const DashboardPage: React.FC = () => {
-  const { data: stats, isLoading, error } = useQuery(
-    'dashboard-stats',
-    dashboardApi.getStats,
-    {
-      refetchInterval: 5 * 60 * 1000, // 5분마다 새로고침
-    }
-  );
+  const { data: stats, isLoading, error } = useQuery({
+    queryKey: ['dashboard-stats'],
+    queryFn: dashboardApi.getStats,
+    refetchInterval: 5 * 60 * 1000, // 5분마다 새로고침
+    retry: 3,
+    staleTime: 1000 * 60 * 5, // 5분
+  });
+
+  console.log('Dashboard data:', { stats, isLoading, error }); // 디버깅용
 
   if (isLoading) {
-    return <LoadingSpinner />;
+    return <LoadingSpinner text="대시보드 데이터를 불러오는 중..." />;
   }
 
   if (error) {
+    console.error('Dashboard error:', error);
     return (
       <Container>
         <Card>
           <div style={{ textAlign: 'center', padding: '40px' }}>
-            <p>대시보드 데이터를 불러오는 중 오류가 발생했습니다.</p>
+            <AlertTriangle size={48} style={{ color: '#EF4444', marginBottom: '16px' }} />
+            <h3>데이터를 불러올 수 없습니다</h3>
+            <p style={{ marginBottom: '20px' }}>대시보드 데이터를 불러오는 중 오류가 발생했습니다.</p>
+            <Button onClick={() => window.location.reload()}>
+              새로고침
+            </Button>
           </div>
         </Card>
       </Container>
     );
   }
 
-  const dashboardStats = stats?.data;
+  // 백엔드에서 받은 데이터 또는 기본값 사용
+  const dashboardStats = stats?.data || {};
 
   return (
     <Container>
-      <PageHeader
-        title="대시보드"
-        subtitle="시스템 현황을 한눈에 확인하세요."
-      />
+      <PageTitle>대시보드</PageTitle>
+      <PageSubtitle>시스템 현황을 한눈에 확인하세요.</PageSubtitle>
 
       <StatsGrid>
         <StatCard color="#3B82F6">
           <div className="stat-header">
             <div>
-              <div className="stat-value">{dashboardStats?.purchaseRequests?.total || 0}</div>
-              <div className="stat-label">전체 구매 요청</div>
+              <div className="stat-value">{dashboardStats?.totalItems || 0}</div>
+              <div className="stat-label">전체 품목</div>
             </div>
             <div className="stat-icon">
-              <ShoppingCart size={24} />
+              <Package size={24} />
             </div>
           </div>
           <div className="stat-change positive">
-            이번 달 +{dashboardStats?.purchaseRequests?.thisMonth || 0}
+            이번 달 +{dashboardStats?.newItemsThisMonth || 0}
           </div>
         </StatCard>
 
         <StatCard color="#F59E0B">
           <div className="stat-header">
             <div>
-              <div className="stat-value">{dashboardStats?.purchaseRequests?.pending || 0}</div>
-              <div className="stat-label">승인 대기</div>
+              <div className="stat-value">{dashboardStats?.lowStockItems || 0}</div>
+              <div className="stat-label">재고 부족</div>
             </div>
             <div className="stat-icon">
-              <Clock size={24} />
+              <AlertTriangle size={24} />
             </div>
           </div>
         </StatCard>
@@ -262,11 +276,11 @@ const DashboardPage: React.FC = () => {
         <StatCard color="#10B981">
           <div className="stat-header">
             <div>
-              <div className="stat-value">{dashboardStats?.inventory?.receivedItems || 0}</div>
-              <div className="stat-label">수령 완료</div>
+              <div className="stat-value">{dashboardStats?.recentPurchases || 0}</div>
+              <div className="stat-label">최근 구매</div>
             </div>
             <div className="stat-icon">
-              <CheckCircle size={24} />
+              <ShoppingCart size={24} />
             </div>
           </div>
         </StatCard>
@@ -274,15 +288,12 @@ const DashboardPage: React.FC = () => {
         <StatCard color="#8B5CF6">
           <div className="stat-header">
             <div>
-              <div className="stat-value">₩{(dashboardStats?.budget?.usedBudget || 0).toLocaleString()}</div>
-              <div className="stat-label">사용 예산</div>
+              <div className="stat-value">₩{(dashboardStats?.totalValue || 0).toLocaleString()}</div>
+              <div className="stat-label">총 재고 가치</div>
             </div>
             <div className="stat-icon">
               <DollarSign size={24} />
             </div>
-          </div>
-          <div className="stat-change">
-            활용률 {dashboardStats?.budget?.utilizationRate || 0}%
           </div>
         </StatCard>
       </StatsGrid>
@@ -295,24 +306,26 @@ const DashboardPage: React.FC = () => {
           </div>
           
           <div className="activity-list">
-            {dashboardStats?.recentReceipts?.slice(0, 5).map((receipt: any, index: number) => (
-              <div key={receipt.id} className="activity-item">
-                <div 
-                  className="activity-icon"
-                  style={{ background: '#10B98120', color: '#10B981' }}
-                >
-                  <Package size={20} />
-                </div>
-                <div className="activity-content">
-                  <div className="activity-title">
-                    {receipt.itemName} 수령 완료
+            {dashboardStats?.recentActivities?.length > 0 ? (
+              dashboardStats.recentActivities.slice(0, 5).map((activity: any, index: number) => (
+                <div key={activity.id || index} className="activity-item">
+                  <div 
+                    className="activity-icon"
+                    style={{ background: '#10B98120', color: '#10B981' }}
+                  >
+                    <Package size={20} />
                   </div>
-                  <div className="activity-time">
-                    {receipt.receiverName} • {new Date(receipt.receivedDate).toLocaleString('ko-KR')}
+                  <div className="activity-content">
+                    <div className="activity-title">
+                      {activity.description || '활동 없음'}
+                    </div>
+                    <div className="activity-time">
+                      {activity.createdAt ? new Date(activity.createdAt).toLocaleString('ko-KR') : '시간 정보 없음'}
+                    </div>
                   </div>
                 </div>
-              </div>
-            )) || (
+              ))
+            ) : (
               <div style={{ textAlign: 'center', color: '#666', padding: '20px' }}>
                 최근 활동이 없습니다.
               </div>
@@ -323,43 +336,33 @@ const DashboardPage: React.FC = () => {
         <QuickActions>
           <h3>빠른 작업</h3>
           <div className="actions-grid">
-            <a href="/purchase-requests" className="action-item">
-              <div className="action-icon">
-                <ShoppingCart size={20} />
-              </div>
-              <div className="action-content">
-                <div className="action-title">구매 요청</div>
-                <div className="action-desc">새로운 구매 요청 등록</div>
-              </div>
-            </a>
-
             <a href="/inventory" className="action-item">
               <div className="action-icon">
                 <Package size={20} />
               </div>
               <div className="action-content">
-                <div className="action-title">품목 관리</div>
-                <div className="action-desc">재고 현황 확인</div>
+                <div className="action-title">재고 관리</div>
+                <div className="action-desc">품목 현황 확인 및 관리</div>
               </div>
             </a>
 
-            <a href="/receipts" className="action-item">
+            <a href="/upload" className="action-item">
+              <div className="action-icon">
+                <ShoppingCart size={20} />
+              </div>
+              <div className="action-content">
+                <div className="action-title">파일 업로드</div>
+                <div className="action-desc">Excel로 일괄 등록</div>
+              </div>
+            </a>
+
+            <a href="/statistics" className="action-item">
               <div className="action-icon">
                 <CheckCircle size={20} />
               </div>
               <div className="action-content">
-                <div className="action-title">수령 처리</div>
-                <div className="action-desc">물품 수령 등록</div>
-              </div>
-            </a>
-
-            <a href="/kakao" className="action-item">
-              <div className="action-icon">
-                <AlertTriangle size={20} />
-              </div>
-              <div className="action-content">
-                <div className="action-title">카톡 처리</div>
-                <div className="action-desc">메시지 파싱</div>
+                <div className="action-title">통계 분석</div>
+                <div className="action-desc">현황 분석 및 리포트</div>
               </div>
             </a>
           </div>

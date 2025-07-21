@@ -1,3 +1,4 @@
+// client/src/components/inventory/common/Layout.tsx
 import React, { useState } from 'react';
 import { Outlet } from 'react-router-dom';
 import styled from 'styled-components';
@@ -15,23 +16,30 @@ const MainContent = styled.main<{ sidebarOpen: boolean }>`
   flex: 1;
   display: flex;
   flex-direction: column;
-  margin-left: ${props => props.sidebarOpen ? '280px' : '80px'};
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-left: ${props => props.sidebarOpen ? '240px' : '60px'};
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   background: ${props => props.theme.colors.background};
-  border-radius: ${props => props.sidebarOpen ? '24px 0 0 0' : '0'};
-  box-shadow: -4px 0 15px rgba(0, 0, 0, 0.05);
   position: relative;
-  z-index: 1;
+  min-width: 0; /* 플렉스 아이템이 너무 작아지는 것을 방지 */
+`;
+
+const HeaderContainer = styled.div`
+  background: ${props => props.theme.colors.surface};
+  border-bottom: 1px solid ${props => props.theme.colors.border};
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.02);
+  z-index: 100;
+  position: sticky;
+  top: 0;
 `;
 
 const ContentArea = styled.div`
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
+  overflow-x: hidden;
   
-  /* 스크롤바 스타일링 */
+  /* 더 부드러운 스크롤바 */
   &::-webkit-scrollbar {
-    width: 8px;
+    width: 6px;
   }
 
   &::-webkit-scrollbar-track {
@@ -39,21 +47,23 @@ const ContentArea = styled.div`
   }
 
   &::-webkit-scrollbar-thumb {
-    background: ${props => props.theme.colors.gray}20;
-    border-radius: 4px;
+    background: ${props => props.theme.colors.border};
+    border-radius: 3px;
     
     &:hover {
-      background: ${props => props.theme.colors.gray}40;
+      background: ${props => props.theme.colors.gray};
     }
   }
 
-  /* 컨텐츠가 로드될 때 페이드인 효과 */
-  animation: fadeIn 0.3s ease;
+  /* 컨텐츠 애니메이션 */
+  > * {
+    animation: fadeInUp 0.4s ease-out;
+  }
   
-  @keyframes fadeIn {
+  @keyframes fadeInUp {
     from {
       opacity: 0;
-      transform: translateY(10px);
+      transform: translateY(20px);
     }
     to {
       opacity: 1;
@@ -65,15 +75,25 @@ const ContentArea = styled.div`
 const Layout: React.FC = () => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
+  const toggleSidebar = () => {
+    setSidebarOpen(!sidebarOpen);
+  };
+
   return (
     <LayoutContainer>
       <Sidebar 
         isOpen={sidebarOpen} 
-        onToggle={() => setSidebarOpen(!sidebarOpen)} 
+        onToggle={toggleSidebar} 
       />
       
       <MainContent sidebarOpen={sidebarOpen}>
-        <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+        <HeaderContainer>
+          <Header 
+            onToggleSidebar={toggleSidebar}
+            sidebarCollapsed={!sidebarOpen}
+          />
+        </HeaderContainer>
+        
         <ContentArea>
           <Outlet />
         </ContentArea>

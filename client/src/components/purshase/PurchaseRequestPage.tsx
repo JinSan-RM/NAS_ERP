@@ -2,13 +2,10 @@
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-
 import { toast } from 'react-toastify';
 import { 
   Plus, 
-  Search, 
   Download, 
-  Filter, 
   RefreshCw, 
   Eye,
   Edit,
@@ -17,417 +14,760 @@ import {
   X,
   Clock,
   AlertCircle,
-  FileText
+  FileText,
+  Search,
+  Filter
 } from 'lucide-react';
 
 // Components
-import PageHeader from '../common/Header';
 import Table from '../common/Table';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Card from '../common/Card';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
-import PurchaseRequestForm from './PurchaseRequestForm';
-import PurchaseRequestFilters from './PurchaseRequestFilters';
-import ApprovalModal from './ApprovalModal';
-import RequestDetailModal from './RequestDetailModal';
 
-// Hooks & Services
-import { usePurchaseRequests } from '../../hooks/usePurchaseRequests';
-import { purchaseApi } from '../../services/api';
+// Services
+import api, { SearchFilters } from '../../services/api';
 
 // Types
-// Types - 경로 수정
-import { 
-  PurchaseRequest, 
-  SearchFilters, 
-  TableColumn, 
-  RequestStatus,
-  UrgencyLevel 
-} from '../../types';  // ../../types 에서 ../types 로 변경
-import { STATUS_LABELS, URGENCY_LABELS, STATUS_COLORS, URGENCY_COLORS } from '../../types';
+interface PurchaseRequest {
+  id: number;
+  itemName: string;
+  quantity: number;
+  requestedBy: string;
+  department: string;
+  urgency: string;
+  status: string;
+  requestDate: string;
+  reason: string;
+  estimatedPrice?: number;
+  supplier?: string;
+  notes?: string;
+}
 
+interface TableColumn<T> {
+  key: keyof T | string;
+  label: string;
+  sortable?: boolean;
+  width?: string;
+  render?: (value: any, item: T) => React.ReactNode;
+}
+
+type RequestStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'in_review';
+type UrgencyLevel = 'all' | 'low' | 'normal' | 'high' | 'urgent';
+
+// Styled Components
 const Container = styled.div`
-  padding: 20px;
+  padding: 24px;
+  max-width: 1400px;
+  margin: 0 auto;
+`;
+
+const PageHeader = styled.div`
+  margin-bottom: 32px;
+`;
+
+const PageTitle = styled.h1`
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: #1f2937;
+`;
+
+const PageSubtitle = styled.p`
+  color: #6b7280;
+  margin-bottom: 0;
+  font-size: 1rem;
+  line-height: 1.5;
 `;
 
 const StatsContainer = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 20px;
-  margin-bottom: 30px;
+  margin-bottom: 32px;
+  
+  @media (max-width: 768px) {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+  }
 `;
 
-const StatCard = styled(Card)<{ color?: string }>`
+const StatCard = styled(Card)<{ $color?: string }>`
   text-align: center;
-  background: ${props => props.color ? `linear-gradient(135deg, ${props.color}20 0%, ${props.color}10 100%)` : 'white'};
-  border-left: 4px solid ${props => props.color || props.theme.colors.primary};
+  background: ${props => props.$color ? `linear-gradient(135deg, ${props.$color}15 0%, ${props.$color}08 100%)` : 'white'};
+  border-left: 4px solid ${props => props.$color || '#3b82f6'};
+  padding: 24px 20px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+  }
   
   .stat-header {
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    margin-bottom: 15px;
-    color: ${props => props.color || props.theme.colors.primary};
+    margin-bottom: 16px;
+    color: ${props => props.$color || '#3b82f6'};
+    font-weight: 500;
   }
   
   .stat-value {
     font-size: 2.5rem;
-    font-weight: bold;
-    margin-bottom: 5px;
-    color: ${props => props.color || props.theme.colors.primary};
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: ${props => props.$color || '#3b82f6'};
+    line-height: 1;
   }
   
   .stat-label {
-    font-size: 0.9rem;
-    color: ${props => props.theme.colors.textSecondary};
+    font-size: 0.875rem;
+    color: #6b7280;
+    margin-bottom: 12px;
   }
   
   .stat-change {
-    font-size: 0.8rem;
-    margin-top: 8px;
+    font-size: 0.75rem;
     padding: 4px 8px;
     border-radius: 12px;
+    font-weight: 500;
+    display: inline-block;
     
     &.positive {
-      background: ${props => props.theme.colors.success}20;
-      color: ${props => props.theme.colors.success};
+      background: #10b98120;
+      color: #10b981;
     }
     
     &.negative {
-      background: ${props => props.theme.colors.error}20;
-      color: ${props => props.theme.colors.error};
+      background: #ef444420;
+      color: #ef4444;
     }
   }
+`;
+
+const ContentCard = styled(Card)`
+  padding: 0;
+  overflow: hidden;
+`;
+
+const FilterSection = styled.div`
+  padding: 20px 24px;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
 `;
 
 const FilterContainer = styled.div`
   display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-start;
+  justify-content: space-between;
+  
+  @media (max-width: 1024px) {
+    flex-direction: column;
+    gap: 16px;
+  }
+`;
+
+const FilterGroup = styled.div`
+  display: flex;
+  gap: 12px;
   align-items: center;
+  flex-wrap: wrap;
+  flex: 1;
+  
+  @media (max-width: 768px) {
+    width: 100%;
+    gap: 8px;
+  }
+`;
+
+const SearchInput = styled.div`
+  position: relative;
+  min-width: 280px;
+  
+  input {
+    width: 100%;
+    padding: 10px 12px 10px 40px;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    
+    &:focus {
+      outline: none;
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    }
+    
+    &::placeholder {
+      color: #9ca3af;
+    }
+  }
+  
+  .search-icon {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9ca3af;
+  }
+  
+  @media (max-width: 768px) {
+    min-width: 100%;
+  }
+`;
+
+const SelectInput = styled.select`
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  min-width: 120px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  }
+  
+  @media (max-width: 768px) {
+    width: 100%;
+  }
 `;
 
 const ActionButtons = styled.div`
   display: flex;
-  gap: 10px;
-  margin-left: auto;
+  gap: 8px;
+  flex-shrink: 0;
+  
+  @media (max-width: 1024px) {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  @media (max-width: 768px) {
+    justify-content: stretch;
+    
+    > button {
+      flex: 1;
+      min-width: 0;
+      
+      span {
+        display: none;
+      }
+      
+      svg {
+        margin: 0;
+      }
+    }
+  }
 `;
 
-const StatusBadge = styled.span<{ status: RequestStatus }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+const TableContainer = styled.div`
+  padding: 24px;
+`;
+
+const StatusBadge = styled.span<{ $status: string }>`
   padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.85rem;
+  border-radius: 16px;
+  font-size: 12px;
   font-weight: 500;
-  background: ${props => STATUS_COLORS[props.status]}20;
-  color: ${props => STATUS_COLORS[props.status]};
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  
+  ${props => {
+    switch (props.$status) {
+      case 'pending':
+        return `
+          background: #fef3c7;
+          color: #92400e;
+        `;
+      case 'approved':
+        return `
+          background: #d1fae5;
+          color: #065f46;
+        `;
+      case 'rejected':
+        return `
+          background: #fee2e2;
+          color: #991b1b;
+        `;
+      case 'in_review':
+        return `
+          background: #dbeafe;
+          color: #1e40af;
+        `;
+      default:
+        return `
+          background: #f3f4f6;
+          color: #374151;
+        `;
+    }
+  }}
 `;
 
-const UrgencyBadge = styled.span<{ urgency: UrgencyLevel }>`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 8px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  background: ${props => URGENCY_COLORS[props.urgency]}20;
-  color: ${props => URGENCY_COLORS[props.urgency]};
+const UrgencyBadge = styled.span<{ $urgency: string }>`
+  padding: 4px 8px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  
+  ${props => {
+    switch (props.$urgency) {
+      case 'urgent':
+        return `
+          background: #fee2e2;
+          color: #991b1b;
+        `;
+      case 'high':
+        return `
+          background: #fed7aa;
+          color: #9a3412;
+        `;
+      case 'normal':
+        return `
+          background: #dbeafe;
+          color: #1e40af;
+        `;
+      case 'low':
+        return `
+          background: #d1fae5;
+          color: #065f46;
+        `;
+      default:
+        return `
+          background: #f3f4f6;
+          color: #374151;
+        `;
+    }
+  }}
 `;
 
 const ActionButtonGroup = styled.div`
   display: flex;
-  gap: 5px;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
 `;
 
-const PriceText = styled.span`
-  font-weight: 600;
-  color: ${props => props.theme.colors.text};
-`;
-
-const RequestInfo = styled.div`
-  .request-title {
-    font-weight: bold;
-    margin-bottom: 4px;
+const IconButton = styled.button`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  color: #6b7280;
+  transition: all 0.2s ease;
+  min-width: 32px;
+  height: 32px;
+  
+  &:hover {
+    background: #f3f4f6;
+    color: #374151;
   }
   
-  .request-meta {
-    font-size: 0.85rem;
-    color: ${props => props.theme.colors.textSecondary};
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+  &:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: -2px;
+  }
+  
+  &.edit:hover {
+    background: #dbeafe;
+    color: #1d4ed8;
+  }
+  
+  &.delete:hover {
+    background: #fee2e2;
+    color: #dc2626;
+  }
+  
+  &.view:hover {
+    background: #f0fdf4;
+    color: #16a34a;
+  }
+  
+  svg {
+    flex-shrink: 0;
   }
 `;
 
+const ErrorContainer = styled.div`
+  text-align: center;
+  padding: 60px 20px;
+  
+  .error-icon {
+    color: #ef4444;
+    margin-bottom: 16px;
+  }
+  
+  .error-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: #1f2937;
+  }
+  
+  .error-message {
+    color: #6b7280;
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+`;
+
+const EmptyState = styled.div`
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b7280;
+  
+  .empty-icon {
+    margin-bottom: 16px;
+    color: #d1d5db;
+  }
+  
+  .empty-title {
+    font-size: 1.125rem;
+    font-weight: 500;
+    margin-bottom: 8px;
+    color: #374151;
+  }
+  
+  .empty-message {
+    margin-bottom: 24px;
+    line-height: 1.6;
+  }
+`;
+
+// 필터 컴포넌트
+const PurchaseRequestFilters: React.FC<{
+  onFilter: (filters: SearchFilters) => void;
+  searchQuery: string;
+  statusFilter: RequestStatus;
+  urgencyFilter: UrgencyLevel;
+  departmentFilter: string;
+  onSearchChange: (value: string) => void;
+  onStatusChange: (value: RequestStatus) => void;
+  onUrgencyChange: (value: UrgencyLevel) => void;
+  onDepartmentChange: (value: string) => void;
+  onRefresh: () => void;
+  onExport: () => void;
+  isLoading: boolean;
+  isExporting: boolean;
+}> = ({
+  onFilter,
+  searchQuery,
+  statusFilter,
+  urgencyFilter,
+  departmentFilter,
+  onSearchChange,
+  onStatusChange,
+  onUrgencyChange,
+  onDepartmentChange,
+  onRefresh,
+  onExport,
+  isLoading,
+  isExporting
+}) => {
+  return (
+    <FilterContainer>
+      <FilterGroup>
+        <SearchInput>
+          <Search size={16} className="search-icon" />
+          <input
+            type="text"
+            placeholder="품목명, 요청자, 부서로 검색..."
+            value={searchQuery}
+            onChange={(e) => onSearchChange(e.target.value)}
+          />
+        </SearchInput>
+        
+        <SelectInput
+          value={statusFilter}
+          onChange={(e) => onStatusChange(e.target.value as RequestStatus)}
+        >
+          <option value="all">전체 상태</option>
+          <option value="pending">승인 대기</option>
+          <option value="approved">승인됨</option>
+          <option value="rejected">거절됨</option>
+          <option value="in_review">검토중</option>
+        </SelectInput>
+        
+        <SelectInput
+          value={urgencyFilter}
+          onChange={(e) => onUrgencyChange(e.target.value as UrgencyLevel)}
+        >
+          <option value="all">전체 긴급도</option>
+          <option value="urgent">긴급</option>
+          <option value="high">높음</option>
+          <option value="normal">보통</option>
+          <option value="low">낮음</option>
+        </SelectInput>
+        
+        <SelectInput
+          value={departmentFilter}
+          onChange={(e) => onDepartmentChange(e.target.value)}
+        >
+          <option value="all">전체 부서</option>
+          <option value="총무부">총무부</option>
+          <option value="개발팀">개발팀</option>
+          <option value="사무관리팀">사무관리팀</option>
+          <option value="영업팀">영업팀</option>
+          <option value="마케팅팀">마케팅팀</option>
+        </SelectInput>
+      </FilterGroup>
+      
+      <ActionButtons>
+        <Button
+          variant="outline"
+          onClick={onRefresh}
+          disabled={isLoading}
+          size="sm"
+          title="새로고침"
+        >
+          <RefreshCw size={16} />
+          <span>새로고침</span>
+        </Button>
+        <Button
+          variant="secondary"
+          onClick={onExport}
+          disabled={isExporting}
+          loading={isExporting}
+          size="sm"
+          title="Excel 다운로드"
+        >
+          <Download size={16} />
+          <span>Excel 다운로드</span>
+        </Button>
+        <Button 
+          onClick={() => toast.info('구매 요청 추가 기능이 곧 구현됩니다.')}
+          size="sm"
+          title="구매 요청 추가"
+        >
+          <Plus size={16} />
+          <span>구매 요청</span>
+        </Button>
+      </ActionButtons>
+    </FilterContainer>
+  );
+};
+
+// 메인 컴포넌트
 const PurchaseRequestPage: React.FC = () => {
+  const queryClient = useQueryClient();
   
   // State
   const [currentPage, setCurrentPage] = useState(1);
-  const [filters, setFilters] = useState<SearchFilters>({});
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
-  const [editingRequest, setEditingRequest] = useState<PurchaseRequest | null>(null);
-  const [viewingRequest, setViewingRequest] = useState<PurchaseRequest | null>(null);
-  const [approvingRequest, setApprovingRequest] = useState<PurchaseRequest | null>(null);
-  const [selectedRequests, setSelectedRequests] = useState<number[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<RequestStatus>('all');
+  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyLevel>('all');
+  const [departmentFilter, setDepartmentFilter] = useState('all');
 
-  // Custom hooks
-  const {
-    requests,
-    loading,
+  // 필터 조합
+  const filters = useMemo(() => {
+    const result: SearchFilters = {};
+    
+    if (searchQuery.trim()) result.search = searchQuery.trim();
+    if (statusFilter !== 'all') result.status = statusFilter;
+    if (urgencyFilter !== 'all') result.urgency = urgencyFilter;
+    if (departmentFilter !== 'all') result.department = departmentFilter;
+    
+    return result;
+  }, [searchQuery, statusFilter, urgencyFilter, departmentFilter]);
+
+  // 구매 요청 목록 조회
+  const { 
+    data: requestsData, 
+    isLoading, 
     error,
-    totalPages,
-    stats,
-    refetch
-  } = usePurchaseRequests(currentPage, 20, filters);
-
-  // Mutations
-  const deleteRequestMutation = useMutation(purchaseApi.deleteRequest, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('purchase-requests');
-      toast.success('구매 요청이 삭제되었습니다.');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
-    },
+    refetch 
+  } = useQuery({
+    queryKey: ['purchase-requests', currentPage, filters],
+    queryFn: () => api.purchase.getRequests({ page: currentPage, limit: 20, ...filters }),
+    keepPreviousData: true,
+    staleTime: 5 * 60 * 1000,
+    retry: 2,
   });
 
-  const approveRequestMutation = useMutation(purchaseApi.approveRequest, {
-    onSuccess: () => {
-      queryClient.invalidateQueries('purchase-requests');
-      setApprovingRequest(null);
-      toast.success('구매 요청이 처리되었습니다.');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || '승인 처리 중 오류가 발생했습니다.');
-    },
+  // 통계 데이터 조회
+  const { data: statsData } = useQuery({
+    queryKey: ['purchase-requests-stats'],
+    queryFn: () => api.purchase.getStats(),
+    staleTime: 5 * 60 * 1000,
   });
 
-  const exportMutation = useMutation(purchaseApi.exportRequests, {
-    onSuccess: (blob: Blob) => {
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `purchase_requests_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+  // Export Mutation - createObjectURL 제거
+  const exportMutation = useMutation({
+    mutationFn: () => api.purchase.exportRequests(filters),
+    onSuccess: () => {
       toast.success('Excel 파일이 다운로드되었습니다.');
     },
-    onError: () => {
-      toast.error('내보내기 중 오류가 발생했습니다.');
+    onError: (error) => {
+      console.error('Export error:', error);
+      toast.error('Excel 다운로드에 실패했습니다.');
     },
   });
 
-  // Table columns
+  // 테이블 컬럼 정의
   const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     {
-      key: 'requestNumber',
-      label: '요청번호',
+      key: 'id',
+      label: '번호',
       sortable: true,
-      width: '120px',
-      render: (value) => (
-        <span style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}>
-          {value}
-        </span>
-      )
+      width: '80px',
+      render: (value) => `#${value}`,
     },
     {
       key: 'itemName',
-      label: '품목 정보',
+      label: '품목명',
       sortable: true,
-      render: (value, item) => (
-        <RequestInfo>
-          <div className="request-title">{value}</div>
-          <div className="request-meta">
-            <span>수량: {item.quantity.toLocaleString()}개</span>
-            {item.specifications && <span>사양: {item.specifications}</span>}
-          </div>
-        </RequestInfo>
-      ),
-    },
-    {
-      key: 'totalBudget',
-      label: '예상금액',
-      sortable: true,
-      width: '120px',
-      align: 'right',
+      width: '200px',
       render: (value) => (
-        <PriceText>₩{value.toLocaleString()}</PriceText>
+        <div style={{ fontWeight: '500', color: '#1f2937' }}>
+          {value || '품목명 없음'}
+        </div>
       ),
     },
     {
-      key: 'requesterName',
+      key: 'quantity',
+      label: '수량',
+      width: '80px',
+      render: (value) => (
+        <div style={{ textAlign: 'center', fontWeight: '500' }}>
+          {value?.toLocaleString() || '0'}
+        </div>
+      ),
+    },
+    {
+      key: 'requestedBy',
       label: '요청자',
-      sortable: true,
-      width: '100px',
+      width: '120px',
       render: (value, item) => (
         <div>
           <div style={{ fontWeight: '500' }}>{value}</div>
-          <div style={{ fontSize: '0.8rem', color: '#666' }}>{item.department}</div>
+          <div style={{ fontSize: '12px', color: '#6b7280' }}>{item.department}</div>
         </div>
       ),
     },
     {
       key: 'urgency',
       label: '긴급도',
-      width: '80px',
-      render: (value) => (
-        <UrgencyBadge urgency={value}>
-          {value === 'emergency' && <AlertCircle size={12} />}
-          {URGENCY_LABELS[value]}
-        </UrgencyBadge>
-      ),
+      width: '100px',
+      render: (value) => <UrgencyBadge $urgency={value}>{value}</UrgencyBadge>,
     },
     {
       key: 'status',
       label: '상태',
       width: '120px',
-      render: (value) => (
-        <StatusBadge status={value}>
-          {value === 'pending_approval' && <Clock size={12} />}
-          {value === 'approved' && <Check size={12} />}
-          {value === 'rejected' && <X size={12} />}
-          {STATUS_LABELS[value]}
-        </StatusBadge>
-      ),
+      render: (value) => <StatusBadge $status={value}>{value}</StatusBadge>,
     },
     {
       key: 'requestDate',
       label: '요청일',
       sortable: true,
-      width: '100px',
-      render: (value) => new Date(value).toLocaleDateString('ko-KR'),
+      width: '120px',
+      render: (value) => value ? new Date(value).toLocaleDateString('ko-KR') : '-',
+    },
+    {
+      key: 'estimatedPrice',
+      label: '예상금액',
+      width: '120px',
+      render: (value) => value ? `${value.toLocaleString()}원` : '-',
     },
     {
       key: 'actions',
-      label: '관리',
-      width: '150px',
+      label: '작업',
+      width: '120px',
       render: (_, item) => (
         <ActionButtonGroup>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleView(item)}
+          <IconButton 
+            className="view"
+            onClick={() => toast.info(`상세보기: ${item.itemName}`)}
             title="상세보기"
           >
             <Eye size={14} />
-          </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleEdit(item)}
-            disabled={!canEdit(item)}
+          </IconButton>
+          <IconButton 
+            className="edit"
+            onClick={() => toast.info(`수정: ${item.itemName}`)}
             title="수정"
           >
             <Edit size={14} />
-          </Button>
-          {canApprove(item) && (
-            <Button
-              size="sm"
-              variant="success"
-              onClick={() => handleApprove(item)}
-              title="승인처리"
-            >
-              <Check size={14} />
-            </Button>
-          )}
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={() => handleDelete(item.id)}
-            disabled={!canDelete(item)}
+          </IconButton>
+          <IconButton 
+            className="delete"
+            onClick={() => toast.info(`삭제: ${item.itemName}`)}
             title="삭제"
           >
             <Trash2 size={14} />
-          </Button>
+          </IconButton>
         </ActionButtonGroup>
       ),
     },
   ], []);
 
-  // Event handlers
-  const handleSearch = (searchFilters: SearchFilters) => {
-    setFilters(searchFilters);
-    setCurrentPage(1);
-  };
-
-  const handleView = (request: PurchaseRequest) => {
-    setViewingRequest(request);
-  };
-
-  const handleEdit = (request: PurchaseRequest) => {
-    setEditingRequest(request);
-    setIsAddModalOpen(true);
-  };
-
-  const handleDelete = async (requestId: number) => {
-    if (window.confirm('정말로 이 구매 요청을 삭제하시겠습니까?')) {
-      deleteRequestMutation.mutate(requestId);
-    }
-  };
-
-  const handleApprove = (request: PurchaseRequest) => {
-    setApprovingRequest(request);
-  };
-
+  // 이벤트 핸들러
   const handleExport = () => {
-    exportMutation.mutate(filters);
+    exportMutation.mutate();
   };
 
-  const handleModalClose = () => {
-    setIsAddModalOpen(false);
-    setEditingRequest(null);
-  };
-
-  const handleFormSuccess = () => {
-    handleModalClose();
+  const handleRefresh = () => {
+    queryClient.invalidateQueries(['purchase-requests']);
+    queryClient.invalidateQueries(['purchase-requests-stats']);
     refetch();
   };
 
-  const handleApprovalSubmit = (action: 'approve' | 'reject', comments?: string) => {
-    if (approvingRequest) {
-      approveRequestMutation.mutate({
-        requestId: approvingRequest.id,
-        action,
-        comments
-      });
-    }
+  // 필터 변경시 첫 페이지로 이동
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [filters]);
+
+  // 데이터 추출
+  const requests = requestsData?.data?.items || [];
+  const totalPages = requestsData?.data?.pages || 0;
+  const totalItems = requestsData?.data?.total || 0;
+  const stats = statsData?.data || {
+    total: 0,
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+    thisMonth: 0,
   };
 
-  // Permission checks
-  const canEdit = (request: PurchaseRequest) => {
-    return ['draft', 'submitted', 'rejected'].includes(request.status);
-  };
-
-  const canDelete = (request: PurchaseRequest) => {
-    return ['draft', 'submitted', 'rejected'].includes(request.status);
-  };
-
-  const canApprove = (request: PurchaseRequest) => {
-    return request.status === 'pending_approval';
-    // 실제로는 현재 사용자가 승인자인지 체크
-  };
-
-  if (loading) {
-    return <LoadingSpinner />;
+  if (isLoading && !requestsData) {
+    return <LoadingSpinner text="구매 요청 데이터를 불러오는 중..." />;
   }
 
   if (error) {
+    console.error('Purchase requests error:', error);
     return (
       <Container>
+        <PageHeader>
+          <PageTitle>구매 요청 관리</PageTitle>
+        </PageHeader>
         <Card>
-          <div style={{ textAlign: 'center', padding: '40px' }}>
-            <p>데이터를 불러오는 중 오류가 발생했습니다.</p>
-            <Button onClick={() => refetch()}>다시 시도</Button>
-          </div>
+          <ErrorContainer>
+            <AlertCircle size={48} className="error-icon" />
+            <div className="error-title">데이터를 불러올 수 없습니다</div>
+            <div className="error-message">
+              백엔드 서버가 실행되지 않았거나 구매 요청 API가 구현되지 않았습니다.
+              <br />
+              서버 상태를 확인해주세요.
+            </div>
+            <Button onClick={handleRefresh} disabled={isLoading}>
+              <RefreshCw size={16} />
+              다시 시도
+            </Button>
+          </ErrorContainer>
         </Card>
       </Container>
     );
@@ -435,143 +775,114 @@ const PurchaseRequestPage: React.FC = () => {
 
   return (
     <Container>
-      <PageHeader
-        title="구매 요청 관리"
-        subtitle="구매 요청을 등록하고 승인 프로세스를 관리할 수 있습니다."
-      />
+      <PageHeader>
+        <PageTitle>구매 요청 관리</PageTitle>
+        <PageSubtitle>
+          구매 요청을 등록하고 승인 프로세스를 관리할 수 있습니다.
+          {totalItems > 0 && ` 총 ${totalItems.toLocaleString()}건의 요청이 있습니다.`}
+        </PageSubtitle>
+      </PageHeader>
 
       {/* 통계 카드 */}
       <StatsContainer>
-        <StatCard color="#3B82F6">
+        <StatCard $color="#3b82f6">
           <div className="stat-header">
             <FileText size={24} />
             <span>전체 요청</span>
           </div>
-          <div className="stat-value">{stats?.total || 0}</div>
+          <div className="stat-value">{stats.total.toLocaleString()}</div>
           <div className="stat-label">총 구매 요청</div>
-          <div className="stat-change positive">
-            이번 달 +{stats?.thisMonth || 0}
-          </div>
+          {stats.thisMonth > 0 && (
+            <div className="stat-change positive">
+              이번 달 +{stats.thisMonth}
+            </div>
+          )}
         </StatCard>
 
-        <StatCard color="#F59E0B">
+        <StatCard $color="#f59e0b">
           <div className="stat-header">
             <Clock size={24} />
             <span>승인 대기</span>
           </div>
-          <div className="stat-value">{stats?.pending || 0}</div>
+          <div className="stat-value">{stats.pending.toLocaleString()}</div>
           <div className="stat-label">처리 대기중</div>
         </StatCard>
 
-        <StatCard color="#10B981">
+        <StatCard $color="#10b981">
           <div className="stat-header">
             <Check size={24} />
             <span>승인 완료</span>
           </div>
-          <div className="stat-value">{stats?.approved || 0}</div>
+          <div className="stat-value">{stats.approved.toLocaleString()}</div>
           <div className="stat-label">승인된 요청</div>
         </StatCard>
 
-        <StatCard color="#EF4444">
+        <StatCard $color="#ef4444">
           <div className="stat-header">
             <X size={24} />
             <span>거절됨</span>
           </div>
-          <div className="stat-value">{stats?.rejected || 0}</div>
+          <div className="stat-value">{stats.rejected.toLocaleString()}</div>
           <div className="stat-label">거절된 요청</div>
         </StatCard>
       </StatsContainer>
 
-      <Card>
-        {/* 필터 및 액션 버튼 */}
-        <FilterContainer>
-          <PurchaseRequestFilters onFilter={handleSearch} />
-          
-          <ActionButtons>
-            <Button
-              variant="outline"
-              onClick={() => refetch()}
-              disabled={loading}
-            >
-              <RefreshCw size={16} />
-              새로고침
-            </Button>
-            <Button
-              variant="secondary"
-              onClick={handleExport}
-              disabled={exportMutation.isLoading}
-            >
-              <Download size={16} />
-              Excel 다운로드
-            </Button>
-            <Button onClick={() => setIsAddModalOpen(true)}>
-              <Plus size={16} />
-              구매 요청
-            </Button>
-          </ActionButtons>
-        </FilterContainer>
+      <ContentCard>
+        {/* 필터 섹션 */}
+        <FilterSection>
+          <PurchaseRequestFilters
+            onFilter={() => {}} // 실시간 필터링이므로 불필요
+            searchQuery={searchQuery}
+            statusFilter={statusFilter}
+            urgencyFilter={urgencyFilter}
+            departmentFilter={departmentFilter}
+            onSearchChange={setSearchQuery}
+            onStatusChange={setStatusFilter}
+            onUrgencyChange={setUrgencyFilter}
+            onDepartmentChange={setDepartmentFilter}
+            onRefresh={handleRefresh}
+            onExport={handleExport}
+            isLoading={isLoading}
+            isExporting={exportMutation.isPending}
+          />
+        </FilterSection>
 
-        {/* 테이블 */}
-        <Table
-          columns={columns}
-          data={requests || []}
-          loading={loading}
-          emptyMessage="등록된 구매 요청이 없습니다."
-          selectable
-          selectedItems={selectedRequests}
-          onSelectItems={setSelectedRequests}
-        />
+        {/* 테이블 컨테이너 */}
+        <TableContainer>
+          {requests.length === 0 && !isLoading ? (
+            <EmptyState>
+              <FileText size={48} className="empty-icon" />
+              <div className="empty-title">등록된 구매 요청이 없습니다</div>
+              <div className="empty-message">
+                새로운 구매 요청을 등록하여 시작해보세요.
+              </div>
+              <Button onClick={() => toast.info('구매 요청 추가 기능이 곧 구현됩니다.')}>
+                <Plus size={16} />
+                첫 구매 요청 등록
+              </Button>
+            </EmptyState>
+          ) : (
+            <>
+              <Table
+                columns={columns}
+                data={requests}
+                loading={isLoading}
+                emptyMessage="검색 조건에 맞는 구매 요청이 없습니다."
+              />
 
-        {/* 페이지네이션 */}
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-        />
-      </Card>
-
-      {/* 구매 요청 추가/수정 모달 */}
-      <Modal
-        isOpen={isAddModalOpen}
-        onClose={handleModalClose}
-        title={editingRequest ? '구매 요청 수정' : '새 구매 요청'}
-        size="lg"
-      >
-        <PurchaseRequestForm
-          request={editingRequest}
-          onSuccess={handleFormSuccess}
-          onCancel={handleModalClose}
-        />
-      </Modal>
-
-      {/* 구매 요청 상세보기 모달 */}
-      {viewingRequest && (
-        <RequestDetailModal
-          request={viewingRequest}
-          isOpen={!!viewingRequest}
-          onClose={() => setViewingRequest(null)}
-          onEdit={() => {
-            setEditingRequest(viewingRequest);
-            setViewingRequest(null);
-            setIsAddModalOpen(true);
-          }}
-          onApprove={() => {
-            setApprovingRequest(viewingRequest);
-            setViewingRequest(null);
-          }}
-        />
-      )}
-
-      {/* 승인/거절 모달 */}
-      {approvingRequest && (
-        <ApprovalModal
-          request={approvingRequest}
-          isOpen={!!approvingRequest}
-          onClose={() => setApprovingRequest(null)}
-          onSubmit={handleApprovalSubmit}
-          loading={approveRequestMutation.isLoading}
-        />
-      )}
+              {/* 페이지네이션 */}
+              {totalPages > 1 && (
+                <Pagination
+                  currentPage={currentPage}
+                  totalPages={totalPages}
+                  onPageChange={setCurrentPage}
+                  totalItems={totalItems}
+                />
+              )}
+            </>
+          )}
+        </TableContainer>
+      </ContentCard>
     </Container>
   );
 };

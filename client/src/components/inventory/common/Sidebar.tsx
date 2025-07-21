@@ -1,4 +1,4 @@
-// client/src/components/common/Sidebar.tsx
+// client/src/components/inventory/common/Sidebar.tsx
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
@@ -16,96 +16,100 @@ import {
   Building,
   CreditCard,
   Bell,
-  Menu,
-  ChevronLeft
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 
 interface SidebarProps {
-  collapsed: boolean;
+  isOpen: boolean;
   onToggle: () => void;
 }
 
-const SidebarContainer = styled.div<{ collapsed: boolean }>`
-  width: 100%;
+const SidebarContainer = styled.div<{ isOpen: boolean }>`
+  position: fixed;
+  left: 0;
+  top: 0;
   height: 100vh;
+  width: ${props => props.isOpen ? '240px' : '60px'};
   background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
   color: white;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 1000;
+  box-shadow: 2px 0 10px rgba(0, 0, 0, 0.1);
 `;
 
-const SidebarHeader = styled.div<{ collapsed: boolean }>`
-  padding: ${props => props.collapsed ? '20px 10px' : '20px'};
+const SidebarHeader = styled.div<{ isOpen: boolean }>`
+  padding: ${props => props.isOpen ? '16px' : '16px 8px'};
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  justify-content: ${props => props.collapsed ? 'center' : 'space-between'};
-  min-height: 80px;
+  justify-content: ${props => props.isOpen ? 'space-between' : 'center'};
+  min-height: 60px;
+  position: relative;
 `;
 
-const Logo = styled.div<{ collapsed: boolean }>`
+const Logo = styled.div<{ isOpen: boolean }>`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: ${props => props.isOpen ? '8px' : '0'};
   
-  h1 {
-    font-size: ${props => props.collapsed ? '0' : '1.5rem'};
+  .logo-icon {
+    min-width: 28px;
+    width: 28px;
+    height: 28px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  
+  .logo-text {
+    font-size: ${props => props.isOpen ? '1.1rem' : '0'};
     font-weight: 600;
     margin: 0;
-    opacity: ${props => props.collapsed ? '0' : '1'};
+    opacity: ${props => props.isOpen ? '1' : '0'};
     transition: all 0.3s ease;
     white-space: nowrap;
     overflow: hidden;
   }
-  
-  .logo-icon {
-    min-width: 32px;
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
 `;
 
-const ToggleButton = styled.button<{ collapsed: boolean }>`
-  background: none;
-  border: none;
+const ToggleButton = styled.button<{ isOpen: boolean }>`
+  position: absolute;
+  right: ${props => props.isOpen ? '8px' : '-15px'};
+  top: 50%;
+  transform: translateY(-50%);
+  background: ${props => props.isOpen ? 'rgba(255, 255, 255, 0.1)' : '#2c3e50'};
+  border: ${props => props.isOpen ? 'none' : '1px solid rgba(255, 255, 255, 0.2)'};
   color: white;
   cursor: pointer;
-  padding: 8px;
-  border-radius: 6px;
-  transition: background 0.3s ease;
-  display: ${props => props.collapsed ? 'none' : 'flex'};
+  padding: 4px;
+  border-radius: 50%;
+  transition: all 0.3s ease;
+  display: flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
+  z-index: 1001;
   
   &:hover {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(255, 255, 255, 0.2);
   }
-`;
-
-const CompanyInfo = styled.div<{ collapsed: boolean }>`
-  text-align: center;
-  padding: ${props => props.collapsed ? '10px 5px' : '15px 20px'};
-  opacity: ${props => props.collapsed ? '0' : '0.8'};
-  font-size: 0.9rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  transition: all 0.3s ease;
-  overflow: hidden;
-  max-height: ${props => props.collapsed ? '0' : '60px'};
 `;
 
 const Navigation = styled.nav`
   flex: 1;
-  padding: 20px 0;
+  padding: 12px 0;
   overflow-y: auto;
   
   &::-webkit-scrollbar {
-    width: 4px;
+    width: 3px;
   }
   
   &::-webkit-scrollbar-track {
@@ -118,24 +122,24 @@ const Navigation = styled.nav`
   }
 `;
 
-const NavGroup = styled.div<{ collapsed: boolean }>`
-  margin-bottom: 30px;
+const NavGroup = styled.div<{ isOpen: boolean }>`
+  margin-bottom: 20px;
   
   &:last-child {
     margin-bottom: 0;
   }
 `;
 
-const NavGroupTitle = styled.div<{ collapsed: boolean }>`
-  font-size: 0.8rem;
+const NavGroupTitle = styled.div<{ isOpen: boolean }>`
+  font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: rgba(255, 255, 255, 0.6);
-  padding: 0 ${props => props.collapsed ? '20px' : '20px'};
-  margin-bottom: 10px;
-  opacity: ${props => props.collapsed ? '0' : '1'};
-  height: ${props => props.collapsed ? '0' : 'auto'};
+  color: rgba(255, 255, 255, 0.5);
+  padding: 0 ${props => props.isOpen ? '16px' : '12px'};
+  margin-bottom: 8px;
+  opacity: ${props => props.isOpen ? '1' : '0'};
+  height: ${props => props.isOpen ? 'auto' : '0'};
   overflow: hidden;
   transition: all 0.3s ease;
 `;
@@ -150,10 +154,10 @@ const NavItem = styled.li`
   margin-bottom: 2px;
 `;
 
-const NavLinkStyled = styled(NavLink)<{ collapsed: boolean }>`
+const NavLinkStyled = styled(NavLink)<{ isOpen: boolean }>`
   display: flex;
   align-items: center;
-  padding: 12px ${props => props.collapsed ? '28px' : '20px'};
+  padding: ${props => props.isOpen ? '10px 16px' : '10px 16px'};
   color: rgba(255, 255, 255, 0.8);
   text-decoration: none;
   transition: all 0.3s ease;
@@ -183,18 +187,19 @@ const NavLinkStyled = styled(NavLink)<{ collapsed: boolean }>`
   }
   
   .nav-icon {
-    min-width: 20px;
-    width: 20px;
-    height: 20px;
-    margin-right: ${props => props.collapsed ? '0' : '15px'};
+    min-width: 18px;
+    width: 18px;
+    height: 18px;
+    margin-right: ${props => props.isOpen ? '12px' : '0'};
     transition: margin 0.3s ease;
+    flex-shrink: 0;
   }
   
   .nav-text {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     font-weight: 500;
-    opacity: ${props => props.collapsed ? '0' : '1'};
-    transform: translateX(${props => props.collapsed ? '-10px' : '0'});
+    opacity: ${props => props.isOpen ? '1' : '0'};
+    transform: translateX(${props => props.isOpen ? '0' : '-10px'});
     transition: all 0.3s ease;
     white-space: nowrap;
     overflow: hidden;
@@ -206,10 +211,10 @@ const NavLinkStyled = styled(NavLink)<{ collapsed: boolean }>`
     color: white;
     font-size: 0.7rem;
     padding: 2px 6px;
-    border-radius: 10px;
-    min-width: 18px;
+    border-radius: 8px;
+    min-width: 16px;
     text-align: center;
-    opacity: ${props => props.collapsed ? '0' : '1'};
+    opacity: ${props => props.isOpen ? '1' : '0'};
     transition: all 0.3s ease;
   }
 `;
@@ -221,11 +226,11 @@ const Tooltip = styled.div<{ show: boolean }>`
   transform: translateY(-50%);
   background: rgba(0, 0, 0, 0.8);
   color: white;
-  padding: 8px 12px;
-  border-radius: 6px;
-  font-size: 0.85rem;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-size: 0.8rem;
   white-space: nowrap;
-  margin-left: 10px;
+  margin-left: 8px;
   opacity: ${props => props.show ? '1' : '0'};
   visibility: ${props => props.show ? 'visible' : 'hidden'};
   transition: all 0.3s ease;
@@ -238,7 +243,7 @@ const Tooltip = styled.div<{ show: boolean }>`
     right: 100%;
     top: 50%;
     transform: translateY(-50%);
-    border: 5px solid transparent;
+    border: 4px solid transparent;
     border-right-color: rgba(0, 0, 0, 0.8);
   }
 `;
@@ -252,7 +257,7 @@ const NavItemWithTooltip = styled.div`
   }
 `;
 
-const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
+const Sidebar: React.FC<SidebarProps> = ({ isOpen, onToggle }) => {
   const location = useLocation();
 
   const mainMenuItems = [
@@ -286,15 +291,15 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
         <NavItemWithTooltip>
           <NavLinkStyled 
             to={item.path} 
-            collapsed={collapsed}
+            isOpen={isOpen}
             className={isActive ? 'active' : ''}
           >
-            <Icon className="nav-icon" size={20} />
+            <Icon className="nav-icon" size={18} />
             <span className="nav-text">{item.label}</span>
             {item.badge && <span className="nav-badge">{item.badge}</span>}
           </NavLinkStyled>
-          {collapsed && (
-            <Tooltip show={collapsed} className="tooltip">
+          {!isOpen && (
+            <Tooltip show={!isOpen} className="tooltip">
               {item.label}
             </Tooltip>
           )}
@@ -304,40 +309,36 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
   };
 
   return (
-    <SidebarContainer collapsed={collapsed}>
-      <SidebarHeader collapsed={collapsed}>
-        <Logo collapsed={collapsed}>
+    <SidebarContainer isOpen={isOpen}>
+      <SidebarHeader isOpen={isOpen}>
+        <Logo isOpen={isOpen}>
           <div className="logo-icon">
-            <Package size={20} />
+            <Package size={16} />
           </div>
-          <h1>ERP 시스템</h1>
+          <h1 className="logo-text">ERP 시스템</h1>
         </Logo>
-        <ToggleButton collapsed={collapsed} onClick={onToggle}>
-          <ChevronLeft size={20} />
+        <ToggleButton isOpen={isOpen} onClick={onToggle}>
+          {isOpen ? <ChevronLeft size={14} /> : <ChevronRight size={14} />}
         </ToggleButton>
       </SidebarHeader>
 
-      <CompanyInfo collapsed={collapsed}>
-        업무 자동화 및 관리
-      </CompanyInfo>
-
       <Navigation>
-        <NavGroup collapsed={collapsed}>
-          <NavGroupTitle collapsed={collapsed}>주요 기능</NavGroupTitle>
+        <NavGroup isOpen={isOpen}>
+          <NavGroupTitle isOpen={isOpen}>주요 기능</NavGroupTitle>
           <NavList>
             {mainMenuItems.map(renderNavItem)}
           </NavList>
         </NavGroup>
 
-        <NavGroup collapsed={collapsed}>
-          <NavGroupTitle collapsed={collapsed}>데이터 관리</NavGroupTitle>
+        <NavGroup isOpen={isOpen}>
+          <NavGroupTitle isOpen={isOpen}>데이터 관리</NavGroupTitle>
           <NavList>
             {dataMenuItems.map(renderNavItem)}
           </NavList>
         </NavGroup>
 
-        <NavGroup collapsed={collapsed}>
-          <NavGroupTitle collapsed={collapsed}>시스템 관리</NavGroupTitle>
+        <NavGroup isOpen={isOpen}>
+          <NavGroupTitle isOpen={isOpen}>시스템 관리</NavGroupTitle>
           <NavList>
             {managementMenuItems.map(renderNavItem)}
           </NavList>

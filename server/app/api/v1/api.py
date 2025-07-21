@@ -1,5 +1,5 @@
 from fastapi import APIRouter
-from app.api.v1.endpoints import inventory, dashboard, upload
+from app.api.v1.endpoints import inventory, dashboard, upload, purchase_request
 
 api_router = APIRouter()
 
@@ -22,4 +22,11 @@ api_router.include_router(
     upload.router, 
     prefix="/upload", 
     tags=["upload"]
+)
+
+# 구매 요청 엔드포인트
+api_router.include_router(
+    purchase_request.router,
+    prefix="/purchase-requests",
+    tags=["purchase-requests"]
 )

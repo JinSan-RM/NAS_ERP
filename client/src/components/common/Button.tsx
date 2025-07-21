@@ -11,14 +11,17 @@ interface ButtonProps {
   onClick?: () => void;
   type?: 'button' | 'submit' | 'reset';
   className?: string;
+  title?: string;
 }
 
-const ButtonContainer = styled.button<{ 
-  variant: string; 
-  size: string; 
-  disabled: boolean; 
-  loading: boolean;
-}>`
+interface StyledButtonProps {
+  $variant: string;
+  $size: string;
+  $disabled: boolean;
+  $loading: boolean;
+}
+
+const ButtonContainer = styled.button<StyledButtonProps>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -30,10 +33,11 @@ const ButtonContainer = styled.button<{
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
+  position: relative;
   
   /* 크기별 스타일 */
   ${props => {
-    switch (props.size) {
+    switch (props.$size) {
       case 'sm':
         return `
           padding: 6px 12px;
@@ -58,7 +62,7 @@ const ButtonContainer = styled.button<{
   /* 변형별 스타일 */
   ${props => {
     const { colors } = props.theme;
-    switch (props.variant) {
+    switch (props.$variant) {
       case 'secondary':
         return `
           background: ${colors.gray};
@@ -118,7 +122,7 @@ const ButtonContainer = styled.button<{
   }}
   
   /* 비활성화 상태 */
-  ${props => props.disabled && `
+  ${props => props.$disabled && `
     opacity: 0.6;
     cursor: not-allowed;
     &:hover {
@@ -128,7 +132,7 @@ const ButtonContainer = styled.button<{
   `}
   
   /* 로딩 상태 */
-  ${props => props.loading && `
+  ${props => props.$loading && `
     cursor: wait;
     &:hover {
       transform: none;
@@ -159,16 +163,19 @@ const Button: React.FC<ButtonProps> = ({
   onClick,
   type = 'button',
   className,
+  title,
 }) => {
   return (
     <ButtonContainer
-      variant={variant}
-      size={size}
-      disabled={disabled || loading}
-      loading={loading}
+      $variant={variant}
+      $size={size}
+      $disabled={disabled || loading}
+      $loading={loading}
       onClick={onClick}
       type={type}
       className={className}
+      disabled={disabled || loading}
+      title={title}
     >
       {loading && <LoadingSpinner />}
       {children}

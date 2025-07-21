@@ -1,31 +1,61 @@
 // client/src/components/inventory/InventoryPage.tsx
 import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
-import { useQuery, useMutation } from '@tanstack/react-query';
-
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { Plus, Search, Download, Filter, RefreshCw } from 'lucide-react';
+import { Plus, Download, Filter, RefreshCw, Edit, Trash2 } from 'lucide-react';
 
 // Components
-import PageHeader from '../common/Header';
-import Select from '../common/Select';
 import Table from '../common/Table';
 import Button from '../common/Button';
 import Card from '../common/Card';
 import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
-import InventoryForm from './InventoryForm';
+import Modal from '../common/Modal';
 import InventoryFilters from './InventoryFilters';
 
-// Hooks & Services
-import { useInventory } from '../../hooks/useInventory';
+// Services
 import { inventoryApi } from '../../services/api';
 
 // Types
-import { InventoryItem, SearchFilters, TableColumn } from '../../types';
+import { TableColumn, SearchFilters } from '../../types';
+
+interface InventoryItem {
+  id: number;
+  item_code: string;
+  item_name: string;
+  category?: string;
+  brand?: string;
+  current_stock: number;
+  minimum_stock: number;
+  maximum_stock?: number;
+  unit_price?: number;
+  currency: string;
+  supplier_name?: string;
+  supplier_contact?: string;
+  location?: string;
+  warehouse?: string;
+  is_active: boolean;
+  description?: string;
+  created_at: string;
+  updated_at?: string;
+}
 
 const Container = styled.div`
   padding: 20px;
+`;
+
+const PageTitle = styled.h1`
+  font-size: 2rem;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: ${props => props.theme.colors.text};
+`;
+
+const PageSubtitle = styled.p`
+  color: ${props => props.theme.colors.textSecondary};
+  margin-bottom: 30px;
+  font-size: 1rem;
 `;
 
 const FilterContainer = styled.div`
@@ -49,19 +79,60 @@ const StatsContainer = styled.div`
   margin-bottom: 30px;
 `;
 
-const StatCard = styled(Card)`
+const StatCard = styled(Card)<{ color?: string }>`
   text-align: center;
-  background: linear-gradient(135deg, ${props => props.theme.colors.primary} 0%, ${props => props.theme.colors.secondary} 100%);
-  color: white;
+  background: ${props => props.color ? `linear-gradient(135deg, ${props.color}20 0%, ${props.color}10 100%)` : 'white'};
+  border-left: 4px solid ${props => props.color || props.theme.colors.primary};
   
   h3 {
     font-size: 2rem;
     margin-bottom: 5px;
+    color: ${props => props.color || props.theme.colors.primary};
   }
   
   p {
     font-size: 0.9rem;
-    opacity: 0.9;
+    color: ${props => props.theme.colors.textSecondary};
+  }
+`;
+
+const StatusBadge = styled.span<{ isActive: boolean }>`
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  background: ${props => props.isActive ? '#10B98120' : '#EF444420'};
+  color: ${props => props.isActive ? '#10B981' : '#EF4444'};
+`;
+
+const ActionButtonGroup = styled.div`
+  display: flex;
+  gap: 5px;
+`;
+
+const StockIndicator = styled.div<{ stockLevel: 'high' | 'medium' | 'low' | 'out' }>`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  
+  .stock-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: ${props => {
+      switch (props.stockLevel) {
+        case 'high': return '#10B981';
+        case 'medium': return '#F59E0B';
+        case 'low': return '#EF4444';
+        case 'out': return '#6B7280';
+        default: return '#6B7280';
+      }
+    }};
+  }
+  
+  .stock-text {
+    font-weight: 500;
   }
 `;
 
@@ -73,22 +144,34 @@ const InventoryPage: React.FC = () => {
   const [filters, setFilters] = useState<SearchFilters>({});
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [selectedItems, setSelectedItems] = useState<number[]>([]);
 
-  // Custom hooks
-  const {
-    items,
-    loading,
+  // 재고 목록 조회
+  const { 
+    data: inventoryData, 
+    isLoading, 
     error,
-    totalPages,
-    stats,
-    refetch
-  } = useInventory(currentPage, 20, filters);
+    refetch 
+  } = useQuery({
+    queryKey: ['inventory', currentPage, filters],
+    queryFn: () => inventoryApi.getItems(currentPage, 20, filters),
+    keepPreviousData: true,
+    staleTime: 5 * 60 * 1000,
+    retry: 3,
+  });
 
-  // Mutations
-  const deleteItemMutation = useMutation(inventoryApi.deleteItem, {
+  // 재고 통계 조회
+  const { data: statsData } = useQuery({
+    queryKey: ['inventory-stats'],
+    queryFn: () => inventoryApi.getStats(),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // 삭제 Mutation
+  const deleteItemMutation = useMutation({
+    mutationFn: inventoryApi.deleteItem,
     onSuccess: () => {
-      queryClient.invalidateQueries('inventory');
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
       toast.success('품목이 삭제되었습니다.');
     },
     onError: (error: any) => {
@@ -96,7 +179,9 @@ const InventoryPage: React.FC = () => {
     },
   });
 
-  const exportMutation = useMutation(inventoryApi.exportData, {
+  // Excel 내보내기 Mutation
+  const exportMutation = useMutation({
+    mutationFn: () => inventoryApi.exportData('inventory'),
     onSuccess: (blob: Blob) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -113,63 +198,102 @@ const InventoryPage: React.FC = () => {
     },
   });
 
-  // Table columns
+  // 재고 수준 계산
+  const getStockLevel = (current: number, minimum: number): 'high' | 'medium' | 'low' | 'out' => {
+    if (current === 0) return 'out';
+    if (current <= minimum) return 'low';
+    if (current <= minimum * 2) return 'medium';
+    return 'high';
+  };
+
+  // 테이블 컬럼 정의
   const columns: TableColumn<InventoryItem>[] = useMemo(() => [
     {
-      key: 'no',
-      label: '번호',
+      key: 'item_code',
+      label: '품목코드',
       sortable: true,
-      width: '80px',
+      width: '120px',
+      render: (value) => (
+        <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: '500' }}>
+          {value}
+        </span>
+      ),
     },
     {
-      key: 'itemName',
+      key: 'item_name',
       label: '품목명',
       sortable: true,
       render: (value, item) => (
         <div>
-          <div style={{ fontWeight: 'bold' }}>{value}</div>
-          {item.specifications && (
+          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{value}</div>
+          {item.brand && (
             <div style={{ fontSize: '0.85rem', color: '#666' }}>
-              {item.specifications}
+              {item.brand}
             </div>
           )}
         </div>
       ),
     },
     {
-      key: 'quantity',
-      label: '수량',
+      key: 'category',
+      label: '카테고리',
       sortable: true,
-      width: '100px',
-      render: (value) => value.toLocaleString(),
+      width: '120px',
+      render: (value) => value || '-',
     },
     {
-      key: 'unitPrice',
+      key: 'current_stock',
+      label: '재고 현황',
+      sortable: true,
+      width: '140px',
+      render: (value, item) => {
+        const stockLevel = getStockLevel(value, item.minimum_stock);
+        return (
+          <StockIndicator stockLevel={stockLevel}>
+            <div className="stock-dot" />
+            <div className="stock-text">
+              {value.toLocaleString()}
+              {item.minimum_stock && (
+                <span style={{ fontSize: '0.8rem', color: '#666' }}>
+                  /{item.minimum_stock}
+                </span>
+              )}
+            </div>
+          </StockIndicator>
+        );
+      },
+    },
+    {
+      key: 'unit_price',
       label: '단가',
       sortable: true,
       width: '120px',
-      render: (value) => `₩${value.toLocaleString()}`,
+      align: 'right',
+      render: (value, item) => value ? `${item.currency} ${value.toLocaleString()}` : '-',
     },
     {
-      key: 'totalPrice',
-      label: '총액',
-      sortable: true,
-      width: '140px',
-      render: (value) => `₩${value.toLocaleString()}`,
-    },
-    {
-      key: 'supplier',
+      key: 'supplier_name',
       label: '공급업체',
       sortable: true,
       width: '150px',
+      render: (value) => value || '-',
     },
     {
-      key: 'status',
+      key: 'location',
+      label: '위치',
+      width: '100px',
+      render: (value, item) => {
+        const location = value || item.warehouse;
+        return location || '-';
+      },
+    },
+    {
+      key: 'is_active',
       label: '상태',
       width: '100px',
       render: (value) => (
-        <StatusBadge status={value}>
-          {getStatusLabel(value)}
+        <StatusBadge isActive={value}>
+          {value ? '활성' : '비활성'}
         </StatusBadge>
       ),
     },
@@ -183,22 +307,24 @@ const InventoryPage: React.FC = () => {
             size="sm"
             variant="outline"
             onClick={() => handleEdit(item)}
+            title="수정"
           >
-            수정
+            <Edit size={14} />
           </Button>
           <Button
             size="sm"
             variant="danger"
-            onClick={() => handleDelete(item.no)}
+            onClick={() => handleDelete(item.id)}
+            title="삭제"
           >
-            삭제
+            <Trash2 size={14} />
           </Button>
         </ActionButtonGroup>
       ),
     },
   ], []);
 
-  // Event handlers
+  // 이벤트 핸들러
   const handleSearch = (searchFilters: SearchFilters) => {
     setFilters(searchFilters);
     setCurrentPage(1);
@@ -209,14 +335,14 @@ const InventoryPage: React.FC = () => {
     setIsAddModalOpen(true);
   };
 
-  const handleDelete = async (itemNo: number) => {
+  const handleDelete = async (itemId: number) => {
     if (window.confirm('정말로 이 품목을 삭제하시겠습니까?')) {
-      deleteItemMutation.mutate(itemNo);
+      deleteItemMutation.mutate(itemId);
     }
   };
 
   const handleExport = () => {
-    exportMutation.mutate('inventory');
+    exportMutation.mutate();
   };
 
   const handleModalClose = () => {
@@ -227,22 +353,22 @@ const InventoryPage: React.FC = () => {
   const handleFormSuccess = () => {
     handleModalClose();
     refetch();
+    queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
   };
 
-  const getStatusLabel = (status: string) => {
-    const statusMap: Record<string, string> = {
-      pending: '주문중',
-      received: '수령완료',
-      ordered: '발주완료',
-    };
-    return statusMap[status] || status;
-  };
+  // 데이터 추출
+  const items = inventoryData?.data?.items || [];
+  const totalPages = inventoryData?.data?.pages || 0;
+  const stats = statsData?.data || {};
 
-  if (loading) {
-    return <LoadingSpinner />;
+  console.log('Inventory data:', { inventoryData, items, stats }); // 디버깅용
+
+  if (isLoading) {
+    return <LoadingSpinner text="재고 데이터를 불러오는 중..." />;
   }
 
   if (error) {
+    console.error('Inventory error:', error);
     return (
       <Container>
         <Card>
@@ -257,28 +383,26 @@ const InventoryPage: React.FC = () => {
 
   return (
     <Container>
-      <PageHeader
-        title="품목 관리"
-        subtitle="전체 품목 현황을 관리하고 모니터링할 수 있습니다."
-      />
+      <PageTitle>품목 관리</PageTitle>
+      <PageSubtitle>전체 품목 현황을 관리하고 모니터링할 수 있습니다.</PageSubtitle>
 
       {/* 통계 카드 */}
       <StatsContainer>
-        <StatCard>
-          <h3>{stats?.totalItems || 0}</h3>
+        <StatCard color="#3B82F6">
+          <h3>{stats?.total_items || 0}</h3>
           <p>전체 품목</p>
         </StatCard>
-        <StatCard>
-          <h3>{stats?.receivedItems || 0}</h3>
-          <p>수령 완료</p>
+        <StatCard color="#10B981">
+          <h3>{items.filter(item => item.current_stock > item.minimum_stock).length}</h3>
+          <p>충분한 재고</p>
         </StatCard>
-        <StatCard>
-          <h3>{stats?.pendingItems || 0}</h3>
-          <p>주문 중</p>
+        <StatCard color="#F59E0B">
+          <h3>{stats?.low_stock_items || 0}</h3>
+          <p>재고 부족</p>
         </StatCard>
-        <StatCard>
-          <h3>₩{(stats?.totalValue || 0).toLocaleString()}</h3>
-          <p>총 금액</p>
+        <StatCard color="#EF4444">
+          <h3>{stats?.out_of_stock_items || 0}</h3>
+          <p>재고 없음</p>
         </StatCard>
       </StatsContainer>
 
@@ -291,7 +415,7 @@ const InventoryPage: React.FC = () => {
             <Button
               variant="outline"
               onClick={() => refetch()}
-              disabled={loading}
+              disabled={isLoading}
             >
               <RefreshCw size={16} />
               새로고침
@@ -299,7 +423,8 @@ const InventoryPage: React.FC = () => {
             <Button
               variant="secondary"
               onClick={handleExport}
-              disabled={exportMutation.isLoading}
+              disabled={exportMutation.isPending}
+              loading={exportMutation.isPending}
             >
               <Download size={16} />
               Excel 다운로드
@@ -314,17 +439,19 @@ const InventoryPage: React.FC = () => {
         {/* 테이블 */}
         <Table
           columns={columns}
-          data={items || []}
-          loading={loading}
+          data={items}
+          loading={isLoading}
           emptyMessage="등록된 품목이 없습니다."
         />
 
         {/* 페이지네이션 */}
-        <Pagination
-          currentPage={currentPage}
-          totalPages={totalPages}
-          onPageChange={setCurrentPage}
-        />
+        {totalPages > 1 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
+        )}
       </Card>
 
       {/* 품목 추가/수정 모달 */}
@@ -334,48 +461,13 @@ const InventoryPage: React.FC = () => {
         title={editingItem ? '품목 수정' : '새 품목 추가'}
         size="lg"
       >
-        <InventoryForm
-          item={editingItem}
-          onSuccess={handleFormSuccess}
-          onCancel={handleModalClose}
-        />
+        <div style={{ padding: '20px', textAlign: 'center' }}>
+          <p>품목 폼 컴포넌트를 여기에 구현하세요.</p>
+          <Button onClick={handleModalClose}>닫기</Button>
+        </div>
       </Modal>
     </Container>
   );
 };
-
-// Styled components
-const StatusBadge = styled.span<{ status: string }>`
-  display: inline-block;
-  padding: 4px 12px;
-  border-radius: 12px;
-  font-size: 0.85rem;
-  font-weight: 500;
-  
-  ${({ status, theme }) => {
-    switch (status) {
-      case 'received':
-        return `
-          background: ${theme.colors.success}20;
-          color: ${theme.colors.success};
-        `;
-      case 'pending':
-        return `
-          background: ${theme.colors.warning}20;
-          color: ${theme.colors.warning};
-        `;
-      default:
-        return `
-          background: ${theme.colors.gray}20;
-          color: ${theme.colors.gray};
-        `;
-    }
-  }}
-`;
-
-const ActionButtonGroup = styled.div`
-  display: flex;
-  gap: 5px;
-`;
 
 export default InventoryPage;

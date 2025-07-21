@@ -1,11 +1,9 @@
 // client/src/components/inventory/InventoryFilters.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
-import { Search, Filter } from 'lucide-react';
-import Card from '../common/Card';
+import { Search, Filter, X } from 'lucide-react';
 import Button from '../common/Button';
-import Input from '../common/Input';
-import Select from '../common/Select';
+import { SearchFilters } from '../../types';
 
 const FilterContainer = styled.div`
   display: flex;
@@ -24,14 +22,15 @@ const SearchGroup = styled.div`
 const SearchInput = styled.input`
   width: 100%;
   padding: 8px 12px 8px 40px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: ${props => props.theme.borderRadius.md};
   font-size: 14px;
+  background: ${props => props.theme.colors.surface};
   
   &:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: ${props => props.theme.colors.primary};
+    box-shadow: 0 0 0 3px ${props => props.theme.colors.primary}20;
   }
 `;
 
@@ -42,99 +41,163 @@ const SearchIcon = styled(Search)`
   transform: translateY(-50%);
   width: 16px;
   height: 16px;
-  color: #6b7280;
+  color: ${props => props.theme.colors.textSecondary};
 `;
 
-const Select = styled.select`
+const FilterSelect = styled.select`
   padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
+  border: 1px solid ${props => props.theme.colors.border};
+  border-radius: ${props => props.theme.borderRadius.md};
   font-size: 14px;
-  background: white;
+  background: ${props => props.theme.colors.surface};
   cursor: pointer;
+  min-width: 120px;
   
   &:focus {
     outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+    border-color: ${props => props.theme.colors.primary};
+    box-shadow: 0 0 0 3px ${props => props.theme.colors.primary}20;
   }
 `;
 
-const FilterButton = styled.button`
+const FilterButton = styled(Button)`
+  white-space: nowrap;
+`;
+
+const ActiveFilters = styled.div`
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+`;
+
+const FilterTag = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: white;
-  color: #374151;
-  font-size: 14px;
-  cursor: pointer;
+  gap: 6px;
+  padding: 4px 8px;
+  background: ${props => props.theme.colors.primary}15;
+  color: ${props => props.theme.colors.primary};
+  border-radius: ${props => props.theme.borderRadius.sm};
+  font-size: 0.85rem;
   
-  &:hover {
-    background: #f9fafb;
+  .remove-filter {
+    cursor: pointer;
+    opacity: 0.7;
+    
+    &:hover {
+      opacity: 1;
+    }
   }
 `;
 
 interface InventoryFiltersProps {
-  searchTerm?: string;
-  category?: string;
-  location?: string;
-  onSearchChange?: (value: string) => void;
-  onCategoryChange?: (value: string) => void;
-  onLocationChange?: (value: string) => void;
-  onFilter?: () => void;
+  onFilter: (filters: SearchFilters) => void;
 }
 
-const InventoryFilters: React.FC<InventoryFiltersProps> = ({
-  searchTerm = '',
-  category = '',
-  location = '',
-  onSearchChange = () => {},
-  onCategoryChange = () => {},
-  onLocationChange = () => {},
-  onFilter = () => {},
-}) => {
+const InventoryFilters: React.FC<InventoryFiltersProps> = ({ onFilter }) => {
+  const [filters, setFilters] = useState<SearchFilters>({});
+
+  const handleFilterChange = (key: keyof SearchFilters, value: string) => {
+    const newFilters = { ...filters };
+    
+    if (value) {
+      newFilters[key] = value;
+    } else {
+      delete newFilters[key];
+    }
+    
+    setFilters(newFilters);
+    onFilter(newFilters);
+  };
+
+  const removeFilter = (key: keyof SearchFilters) => {
+    const newFilters = { ...filters };
+    delete newFilters[key];
+    setFilters(newFilters);
+    onFilter(newFilters);
+  };
+
+  const clearAllFilters = () => {
+    setFilters({});
+    onFilter({});
+  };
+
+  const hasActiveFilters = Object.keys(filters).length > 0;
+
+  const getFilterDisplayName = (key: string, value: string) => {
+    const names: Record<string, string> = {
+      search: '검색',
+      category: '카테고리',
+      is_active: '상태',
+    };
+    
+    if (key === 'is_active') {
+      return `${names[key]}: ${value === 'true' ? '활성' : '비활성'}`;
+    }
+    
+    return `${names[key] || key}: ${value}`;
+  };
+
   return (
-    <FilterContainer>
-      <SearchGroup>
-        <SearchIcon />
-        <SearchInput
-          type="text"
-          placeholder="품목명으로 검색..."
-          value={searchTerm}
-          onChange={(e) => onSearchChange(e.target.value)}
-        />
-      </SearchGroup>
+    <>
+      <FilterContainer>
+        <SearchGroup>
+          <SearchIcon />
+          <SearchInput
+            type="text"
+            placeholder="품목명, 품목코드로 검색..."
+            value={filters.search || ''}
+            onChange={(e) => handleFilterChange('search', e.target.value)}
+          />
+        </SearchGroup>
 
-      <Select
-        value={category}
-        onChange={(e) => onCategoryChange(e.target.value)}
-      >
-        <option value="">전체 카테고리</option>
-        <option value="사무용품">사무용품</option>
-        <option value="전자기기">전자기기</option>
-        <option value="소모품">소모품</option>
-        <option value="기타">기타</option>
-      </Select>
+        <FilterSelect
+          value={filters.category || ''}
+          onChange={(e) => handleFilterChange('category', e.target.value)}
+        >
+          <option value="">전체 카테고리</option>
+          <option value="전자제품">전자제품</option>
+          <option value="사무용품">사무용품</option>
+          <option value="소모품">소모품</option>
+          <option value="기타">기타</option>
+        </FilterSelect>
 
-      <Select
-        value={location}
-        onChange={(e) => onLocationChange(e.target.value)}
-      >
-        <option value="">전체 위치</option>
-        <option value="창고A">창고A</option>
-        <option value="창고B">창고B</option>
-        <option value="사무실">사무실</option>
-        <option value="기타">기타</option>
-      </Select>
+        <FilterSelect
+          value={filters.is_active || ''}
+          onChange={(e) => handleFilterChange('is_active', e.target.value)}
+        >
+          <option value="">전체 상태</option>
+          <option value="true">활성</option>
+          <option value="false">비활성</option>
+        </FilterSelect>
 
-      <FilterButton onClick={onFilter}>
-        <Filter size={16} />
-        필터 적용
-      </FilterButton>
-    </FilterContainer>
+        <FilterButton 
+          variant="outline" 
+          onClick={clearAllFilters}
+          disabled={!hasActiveFilters}
+        >
+          <Filter size={16} />
+          {hasActiveFilters ? '필터 초기화' : '필터'}
+        </FilterButton>
+      </FilterContainer>
+
+      {/* 활성 필터 표시 */}
+      {hasActiveFilters && (
+        <ActiveFilters>
+          {Object.entries(filters).map(([key, value]) => (
+            <FilterTag key={key}>
+              <span>{getFilterDisplayName(key, value as string)}</span>
+              <X 
+                size={12} 
+                className="remove-filter"
+                onClick={() => removeFilter(key as keyof SearchFilters)}
+              />
+            </FilterTag>
+          ))}
+        </ActiveFilters>
+      )}
+    </>
   );
 };
 
