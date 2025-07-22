@@ -7,7 +7,7 @@ from io import BytesIO
 
 from app import crud, schemas
 from app.api.deps import get_db
-from app.models.purchase_request import RequestStatus, UrgencyLevel
+from app.enums import RequestStatus, UrgencyLevel  # 공유 Enum 사용
 from app.schemas.purchase_request import (
     PurchaseRequest,
     PurchaseRequestCreate,
@@ -15,8 +15,6 @@ from app.schemas.purchase_request import (
     PurchaseRequestList,
     PurchaseRequestStats,
     PurchaseRequestFilter,
-    ApprovalRequest,
-    PurchaseRequestBulkUpload
 )
 
 router = APIRouter()
@@ -94,7 +92,17 @@ def read_purchase_request_stats(db: Session = Depends(get_db)):
     구매 요청 통계 조회
     """
     stats = crud.purchase_request.get_stats(db=db)
-    return stats
+    
+    # snake_case로 반환 (alias를 사용해서 camelCase도 지원)
+    return {
+        "total": stats.get("total", 0),
+        "pending": stats.get("pending", 0),
+        "approved": stats.get("approved", 0),
+        "rejected": stats.get("rejected", 0),
+        "this_month": stats.get("thisMonth", stats.get("this_month", 0)),  # 둘 다 지원
+        "total_budget": stats.get("totalBudget", stats.get("total_budget", 0.0)),  # 둘 다 지원
+        "average_approval_time": stats.get("averageProcessingTime", stats.get("average_approval_time", None))  # 둘 다 지원
+    }
 
 @router.get("/categories", response_model=List[str])
 def read_categories(db: Session = Depends(get_db)):
@@ -217,52 +225,6 @@ def delete_purchase_request(
     crud.purchase_request.soft_delete(db=db, id=request_id)
     return {"message": "구매 요청이 삭제되었습니다."}
 
-@router.post("/{request_id}/approve", response_model=PurchaseRequest)
-def approve_purchase_request(
-    *,
-    db: Session = Depends(get_db),
-    request_id: int,
-    approval: ApprovalRequest
-):
-    """
-    구매 요청 승인/거절
-    """
-    purchase_request = crud.purchase_request.get(db=db, id=request_id)
-    if not purchase_request:
-        raise HTTPException(status_code=404, detail="구매 요청을 찾을 수 없습니다.")
-    
-    if purchase_request.status != RequestStatus.PENDING_APPROVAL:
-        raise HTTPException(
-            status_code=400,
-            detail="승인 대기 상태의 요청만 처리할 수 있습니다."
-        )
-    
-    try:
-        if approval.action == "approve":
-            result = crud.purchase_request.approve_request(
-                db=db,
-                request_id=request_id,
-                approver_name=approval.approver_name or "시스템 관리자",
-                approver_email=approval.approver_email,
-                comments=approval.comments
-            )
-        elif approval.action == "reject":
-            result = crud.purchase_request.reject_request(
-                db=db,
-                request_id=request_id,
-                approver_name=approval.approver_name or "시스템 관리자",
-                approver_email=approval.approver_email,
-                reason=approval.comments
-            )
-        else:
-            raise HTTPException(status_code=400, detail="올바르지 않은 액션입니다.")
-        
-        return result
-    except Exception as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"승인 처리에 실패했습니다: {str(e)}"
-        )
 
 @router.post("/bulk-upload", response_model=dict)
 def bulk_upload_purchase_requests(

@@ -3,38 +3,8 @@ from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, 
 from sqlalchemy.sql import func
 from enum import Enum as PyEnum
 from app.core.database import Base
+from app.enums import RequestStatus, UrgencyLevel, ItemCategory, PurchaseMethod  # 공유 Enum 사용
 
-class RequestStatus(PyEnum):
-    DRAFT = "draft"
-    SUBMITTED = "submitted"
-    PENDING_APPROVAL = "pending_approval"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
-
-class UrgencyLevel(PyEnum):
-    LOW = "low"
-    NORMAL = "normal"
-    HIGH = "high"
-    URGENT = "urgent"
-    EMERGENCY = "emergency"
-
-class ItemCategory(PyEnum):
-    OFFICE_SUPPLIES = "office_supplies"
-    ELECTRONICS = "electronics"
-    FURNITURE = "furniture"
-    SOFTWARE = "software"
-    MAINTENANCE = "maintenance"
-    SERVICES = "services"
-    OTHER = "other"
-
-class PurchaseMethod(PyEnum):
-    DIRECT = "direct"
-    QUOTATION = "quotation"
-    CONTRACT = "contract"
-    FRAMEWORK = "framework"
-    MARKETPLACE = "marketplace"
 
 class PurchaseRequest(Base):
     __tablename__ = "purchase_requests"

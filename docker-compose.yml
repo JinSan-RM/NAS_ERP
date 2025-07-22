@@ -16,6 +16,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./logs/postgres:/var/log/postgresql
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql  # 추가: 초기화 스크립
     networks:
       - inventory-network
     # 시놀로지 NAS 최적화 설정
@@ -56,13 +57,10 @@ services:
       - WATCHFILES_FORCE_POLLING=true  # 파일 변경 감지 강제
       # 데이터베이스 설정
       - DATABASE_URL=postgresql://inventory_user:inventory_password@postgres:5432/inventory_db
-      
-      # 보안 설정
-      - SECRET_KEY=your-super-secret-key-change-this-in-production
-      - ACCESS_TOKEN_EXPIRE_MINUTES=30
+    
       
       # CORS 설정
-      - ALLOWED_HOSTS=["http://localhost", "http://localhost:80", "http://localhost:3001"]
+      - ALLOWED_HOSTS=["http://localhost:*", "http://localhost:80", "http://localhost:3001", "http://nas-ip:*", "http://*.example.com", "127.0.0.1:*"]
       
       # 파일 업로드 설정
       - UPLOAD_DIR=/app/uploads

@@ -6,6 +6,8 @@ from app.core.config import settings
 from app.api.v1.api import api_router
 from app.core.database import engine, Base
 
+import os
+
 # 데이터베이스 테이블 생성
 try:
     Base.metadata.create_all(bind=engine)
@@ -20,14 +22,19 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-# CORS 설정
+allowed_origins_str = os.getenv("ALLOWED_HOSTS", "http://localhost,http://localhost:80,http://localhost:3001")
+allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]  # strip() 추가로 공백 제거
+print(f"✅ Loaded ALLOWED_ORIGINS: {allowed_origins}")  # 로그 추가 - 서버 시작 시 출력됨
+
+# CORS 미들웨어 추가 (기존 유지, 하지만 allow_origins에 * 추가로 테스트)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_HOSTS,
+    allow_origins=allowed_origins + ["*"],  # 테스트용 와일드카드 추가 (프로덕션에서 제거)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Trusted Host 미들웨어
 if hasattr(settings, 'TRUSTED_HOSTS') and settings.TRUSTED_HOSTS:

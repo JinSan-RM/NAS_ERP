@@ -19,8 +19,7 @@ from .purchase_request import (
     PurchaseRequestStats,
     PurchaseRequestBase,
     PurchaseRequestFilter,
-    ApprovalRequest,
-    PurchaseRequestBulkUpload
+    PurchaseRequestApproval
 )
 
 __all__ = [
@@ -42,6 +41,5 @@ __all__ = [
     "PurchaseRequestStats",
     "PurchaseRequestBase",
     "PurchaseRequestFilter",
-    "ApprovalRequest",
-    "PurchaseRequestBulkUpload"
+    "PurchaseRequestApproval"
 ]

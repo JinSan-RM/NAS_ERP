@@ -5,7 +5,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, extract
 
 from app.crud.base import CRUDBase
-from app.models.purchase_request import PurchaseRequest, RequestStatus, UrgencyLevel
+from app.enums import RequestStatus, UrgencyLevel, ItemCategory, PurchaseMethod  # 공유 Enum 사용
+from app.models.purchase_request import PurchaseRequest
 from app.schemas.purchase_request import (
     PurchaseRequestCreate, 
     PurchaseRequestUpdate, 
@@ -273,13 +274,13 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
         # 평균 처리 시간 (승인된 요청들)
         avg_processing_time = db.query(
             func.avg(
-                func.extract('epoch', PurchaseRequest.approval_date) - 
+                func.extract('epoch', PurchaseRequest.approved_date) - 
                 func.extract('epoch', PurchaseRequest.created_at)
             ) / 86400  # 초를 일로 변환
         ).filter(
             and_(
                 PurchaseRequest.status == RequestStatus.APPROVED,
-                PurchaseRequest.approval_date.isnot(None),
+                PurchaseRequest.approved_date.isnot(None),
                 PurchaseRequest.is_active == True
             )
         ).scalar()
@@ -289,9 +290,9 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
             "pending": pending or 0,
             "approved": approved or 0,
             "rejected": rejected or 0,
-            "thisMonth": thisMonth or 0,
-            "totalBudget": float(total_budget),
-            "averageProcessingTime": float(avg_processing_time) if avg_processing_time else None
+            "this_month": thisMonth or 0,
+            "total_budget": float(total_budget),
+            "average_processing_time": float(avg_processing_time) if avg_processing_time else None
         }
     
     def approve_request(

@@ -2,40 +2,7 @@
 from datetime import datetime
 from typing import Optional, List
 from pydantic import BaseModel, Field, ConfigDict, validator
-from enum import Enum
-
-# Enum 클래스들
-class RequestStatus(str, Enum):
-    DRAFT = "draft"
-    SUBMITTED = "submitted"
-    PENDING_APPROVAL = "pending_approval"
-    APPROVED = "approved"
-    REJECTED = "rejected"
-    CANCELLED = "cancelled"
-    COMPLETED = "completed"
-
-class UrgencyLevel(str, Enum):
-    LOW = "low"
-    NORMAL = "normal"
-    HIGH = "high"
-    URGENT = "urgent"
-    EMERGENCY = "emergency"
-
-class ItemCategory(str, Enum):
-    OFFICE_SUPPLIES = "office_supplies"
-    ELECTRONICS = "electronics"
-    FURNITURE = "furniture"
-    SOFTWARE = "software"
-    MAINTENANCE = "maintenance"
-    SERVICES = "services"
-    OTHER = "other"
-
-class PurchaseMethod(str, Enum):
-    DIRECT = "direct"
-    QUOTATION = "quotation"
-    CONTRACT = "contract"
-    FRAMEWORK = "framework"
-    MARKETPLACE = "marketplace"
+from app.enums import RequestStatus, UrgencyLevel, ItemCategory, PurchaseMethod  # 공유 Enum 사용
 
 # 기본 스키마
 class PurchaseRequestBase(BaseModel):
@@ -120,7 +87,7 @@ class PurchaseRequestUpdate(BaseModel):
 
 # 승인/거절용 스키마
 class PurchaseRequestApproval(BaseModel):
-    action: str = Field(..., regex="^(approve|reject)$", description="승인 액션")
+    action: str = Field(..., pattern="^(approve|reject)$", description="승인 액션")
     comments: Optional[str] = Field(None, description="승인/거절 코멘트")
     approval_level: Optional[int] = Field(None, description="승인 레벨")
 
@@ -163,15 +130,19 @@ class PurchaseRequestList(BaseModel):
     size: int
     pages: int
 
-# 통계 스키마
+# 통계 스키마 - 수정된 부분
 class PurchaseRequestStats(BaseModel):
     total: int
     pending: int
     approved: int
     rejected: int
-    this_month: int
-    total_budget: float
-    average_approval_time: Optional[float] = None
+    this_month: int = Field(alias="thisMonth")  # alias 추가
+    total_budget: float = Field(alias="totalBudget")  # alias 추가
+    average_approval_time: Optional[float] = Field(None, alias="averageProcessingTime")  # alias 추가
+    
+    class Config:
+        populate_by_name = True  # alias와 원래 이름 모두 허용
+        allow_population_by_field_name = True
 
 # 검색 필터
 class PurchaseRequestFilter(BaseModel):
