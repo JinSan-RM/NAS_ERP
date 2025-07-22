@@ -71,11 +71,14 @@ const InventoryForm: React.FC<InventoryFormProps> = ({
 
   const categoryOptions = [
     { value: '', label: '카테고리 선택' },
-    { value: '사무용품', label: '사무용품' },
-    { value: '전자기기', label: '전자기기' },
+    { value: 'IT 관련 장비', label: 'IT 관련 장비' },
+    { value: '사무 용품', label: '사무 용품' },
+    { value: '제조 장비', label: '제조 장비' },
     { value: '소모품', label: '소모품' },
-    { value: '기타', label: '기타' }
+    { value: '아이템', label: '아이템' },
+    { value: '기타', label: '기타' },
   ];
+
 
   const unitOptions = [
     { value: '', label: '단위 선택' },

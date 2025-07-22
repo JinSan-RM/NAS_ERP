@@ -440,7 +440,8 @@ const PurchaseRequestPage: React.FC = () => {
   });
 
   // 테이블 컬럼 정의
-  const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
+  // 테이블 컬럼 정의 수정
+const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     {
       key: 'id',
       label: '번호',
@@ -449,7 +450,7 @@ const PurchaseRequestPage: React.FC = () => {
       render: (value) => `#${value}`,
     },
     {
-      key: 'itemName',
+      key: 'item_name', // 백엔드 필드명과 일치
       label: '품목명',
       sortable: true,
       width: '200px',
@@ -470,7 +471,7 @@ const PurchaseRequestPage: React.FC = () => {
       ),
     },
     {
-      key: 'requestedBy',
+      key: 'requester_name', // 백엔드 필드명과 일치
       label: '요청자',
       width: '120px',
       render: (value, item) => (
@@ -484,23 +485,43 @@ const PurchaseRequestPage: React.FC = () => {
       key: 'urgency',
       label: '긴급도',
       width: '100px',
-      render: (value) => <UrgencyBadge $urgency={value}>{value}</UrgencyBadge>,
+      render: (value) => {
+        const urgencyMap: Record<string, string> = {
+          'low': '낮음',
+          'normal': '보통',
+          'high': '높음', 
+          'urgent': '긴급',
+          'emergency': '응급'
+        };
+        return <UrgencyBadge $urgency={value}>{urgencyMap[value] || value}</UrgencyBadge>;
+      },
     },
     {
       key: 'status',
       label: '상태',
       width: '120px',
-      render: (value) => <StatusBadge $status={value}>{value}</StatusBadge>,
+      render: (value) => {
+        const statusMap: Record<string, string> = {
+          'draft': '임시저장',
+          'submitted': '제출됨',
+          'pending_approval': '승인대기',
+          'approved': '승인됨',
+          'rejected': '거절됨',
+          'cancelled': '취소됨',
+          'completed': '완료됨'
+        };
+        return <StatusBadge $status={value}>{statusMap[value] || value}</StatusBadge>;
+      },
     },
     {
-      key: 'requestDate',
+      key: 'created_at', // 백엔드 필드명과 일치
       label: '요청일',
       sortable: true,
       width: '120px',
       render: (value) => value ? new Date(value).toLocaleDateString('ko-KR') : '-',
     },
     {
-      key: 'estimatedPrice',
+      key: 'total_budget', // 백엔드 필드명과 일치
       label: '예상금액',
       width: '120px',
       render: (value) => value ? `${value.toLocaleString()}원` : '-',
@@ -594,7 +615,7 @@ const PurchaseRequestPage: React.FC = () => {
     pending: 0,
     approved: 0,
     rejected: 0,
-    thisMonth: 0,
+    this_month: 0,
   };
 
   if (isLoading && !requestsData) {

@@ -182,40 +182,7 @@ const ErrorMessage = styled.div`
   gap: 4px;
 `;
 
-const categoryOptions = [
-  { value: 'office_supplies', label: '사무용품' },
-  { value: 'electronics', label: '전자기기' },
-  { value: 'furniture', label: '가구' },
-  { value: 'software', label: '소프트웨어' },
-  { value: 'equipment', label: '장비' },
-  { value: 'consumables', label: '소모품' },
-  { value: 'services', label: '서비스' },
-  { value: 'other', label: '기타' },
-];
 
-const urgencyOptions = [
-  { value: 'low', label: '낮음' },
-  { value: 'medium', label: '보통' },
-  { value: 'high', label: '높음' },
-  { value: 'urgent', label: '긴급' },
-];
-
-const purchaseMethodOptions = [
-  { value: 'direct', label: '직접구매' },
-  { value: 'quotation', label: '견적요청' },
-  { value: 'contract', label: '계약' },
-  { value: 'framework', label: '단가계약' },
-  { value: 'marketplace', label: '마켓플레이스' },
-];
-
-const departmentOptions = [
-  { value: '총무부', label: '총무부' },
-  { value: '개발팀', label: '개발팀' },
-  { value: '사무관리팀', label: '사무관리팀' },
-  { value: '영업팀', label: '영업팀' },
-  { value: '마케팅팀', label: '마케팅팀' },
-  { value: '인사팀', label: '인사팀' },
-];
 
 const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
   onSuccess,
@@ -223,25 +190,63 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
   initialData,
   isEdit = false
 }) => {
+
+  // 카테고리 옵션 수정 (백엔드 enum과 일치)
+  const categoryOptions = [
+  { value: 'OFFICE_SUPPLIES', label: '사무 용품' },
+  { value: 'ELECTRONICS', label: '전자제품/IT 장비' },
+  { value: 'FURNITURE', label: '가구' },
+  { value: 'SOFTWARE', label: '소프트웨어' },
+  { value: 'MAINTENANCE', label: '유지보수' },
+  { value: 'SERVICES', label: '서비스' },
+  { value: 'OTHER', label: '기타' }
+  ];
+
+  // 긴급도 옵션 수정 (백엔드 enum과 일치)
+  const urgencyOptions = [
+    { value: 'low', label: '낮음' },
+    { value: 'normal', label: '보통' },
+    { value: 'high', label: '높음' },
+    { value: 'urgent', label: '긴급' },
+    { value: 'emergency', label: '응급' },
+  ];
+
+  // 구매 방법 옵션 수정 (백엔드 enum과 일치)
+  const purchaseMethodOptions = [
+    { value: 'direct', label: '직접구매' },
+    { value: 'quotation', label: '견적요청' },
+    { value: 'contract', label: '계약' },
+    { value: 'framework', label: '단가계약' },
+    { value: 'marketplace', label: '마켓플레이스' },
+  ];
+
+  const departmentOptions = [
+    { value: 'H/W 개발팀', label: 'H/W 개발팀' },
+    { value: 'S/W 개발팀', label: 'S/W 개발팀' },
+    { value: '총무부', label: '총무부' },
+    { value: '사무관리팀', label: '사무관리팀' },
+    { value: '영업팀', label: '영업팀' },
+    // { value: '마케팅팀', label: '마케팅팀' },
+    { value: '인사팀', label: '인사팀' },
+  ];
   const queryClient = useQueryClient();
   const [dragOver, setDragOver] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [formData, setFormData] = useState<PurchaseRequestFormData>({
+  const [formData, setFormData] = useState({
     itemName: initialData?.itemName || '',
     specifications: initialData?.specifications || '',
     quantity: initialData?.quantity || 1,
     estimatedPrice: initialData?.estimatedPrice || 0,
     preferredSupplier: initialData?.preferredSupplier || '',
     category: initialData?.category || '',
-    urgency: initialData?.urgency || 'medium',
+    urgency: initialData?.urgency || 'normal',
     justification: initialData?.justification || '',
-    department: initialData?.department || '',
+    department: initialData?.department || 'S/W 개발팀',
     project: initialData?.project || '',
     budgetCode: initialData?.budgetCode || '',
     expectedDeliveryDate: initialData?.expectedDeliveryDate || '',
     purchaseMethod: initialData?.purchaseMethod || 'direct',
-    attachments: [],
   });
 
   const createMutation = useMutation({
@@ -253,8 +258,30 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
       onSuccess();
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || '등록 중 오류가 발생했습니다.');
-    },
+    // 디버깅을 위한 상세 로그 추가
+    console.error('=== 구매 요청 생성 실패 ===');
+    console.error('전체 에러 객체:', error);
+    console.error('HTTP 상태 코드:', error.response?.status);
+    console.error('에러 응답 데이터:', error.response?.data);
+    console.error('에러 메시지:', error.response?.data?.message);
+    console.error('에러 디테일:', error.response?.data?.detail);
+    
+    // detail 배열의 각 항목을 개별적으로 로깅
+    if (error.response?.data?.detail && Array.isArray(error.response.data.detail)) {
+      console.error('=== 상세 검증 오류들 ===');
+      error.response.data.detail.forEach((item, index) => {
+        console.error(`오류 ${index + 1}:`, item);
+        console.error(`- 타입:`, item.type);
+        console.error(`- 메시지:`, item.msg);
+        console.error(`- 입력값:`, item.input);
+        console.error(`- 위치:`, item.loc);
+      });
+    }
+    
+    console.error('validation errors:', error.response?.data?.errors);
+    
+    toast.error(error.response?.data?.message || '등록 중 오류가 발생했습니다.');
+  },
   });
 
   const validateForm = (): boolean => {
@@ -288,22 +315,47 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!validateForm()) {
-      toast.error('입력 정보를 확인해주세요.');
-      return;
-    }
+// handleSubmit 함수 수정
+const handleSubmit = (e: React.FormEvent) => {
+  e.preventDefault();
+  
+  if (!validateForm()) {
+    toast.error('입력 정보를 확인해주세요.');
+    return;
+  }
+  
 
-    const submitData = {
-      ...formData,
-      quantity: Number(formData.quantity),
-      estimatedPrice: Number(formData.estimatedPrice),
-    };
-
-    createMutation.mutate(submitData);
+  // 백엔드 API에 맞는 데이터 형식으로 변환
+  const submitData = {
+    item_name: formData.itemName,
+    specifications: formData.specifications,
+    quantity: Number(formData.quantity),
+    unit: '개',
+    estimated_unit_price: Number(formData.estimatedPrice),
+    total_budget: Number(formData.quantity) * Number(formData.estimatedPrice),
+    currency: 'KRW',
+    category: formData.category,
+    urgency: formData.urgency,
+    purchase_method: formData.purchaseMethod,
+    requester_name: '현재사용자',
+    department: formData.department,
+    expected_delivery_date: formData.expectedDeliveryDate ? new Date(`${formData.expectedDeliveryDate}T00:00:00`).toISOString() : undefined,
+    justification: formData.justification,
   };
+
+  // 디버깅을 위한 로그 추가
+  console.log('=== 전송할 데이터 ===');
+  console.log('submitData:', submitData);
+  console.log('카테고리 값:', formData.category);
+  console.log('긴급도 값:', formData.urgency);
+  console.log('구매 방법 값:', formData.purchaseMethod);
+  console.log('숫자 변환 확인:');
+  console.log('- quantity:', Number(formData.quantity), typeof Number(formData.quantity));
+  console.log('- estimated_unit_price:', Number(formData.estimatedPrice), typeof Number(formData.estimatedPrice));
+  console.log('- total_budget:', Number(formData.quantity) * Number(formData.estimatedPrice));
+
+  createMutation.mutate(submitData);
+};
 
   const handleChange = (field: keyof PurchaseRequestFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));

@@ -139,20 +139,17 @@ export type RequestStatus =
 
 export type UrgencyLevel = 
   | 'low'             // 낮음
-  | 'medium'          // 보통
+  | 'normal'          // 보통
   | 'high'            // 높음
   | 'urgent';         // 긴급
 
 export type ItemCategory = 
-  | 'office_supplies'  // 사무용품
-  | 'electronics'      // 전자기기
-  | 'furniture'        // 가구
-  | 'software'         // 소프트웨어
-  | 'equipment'        // 장비
-  | 'consumables'      // 소모품
-  | 'services'         // 서비스
-  | 'maintenance'      // 유지보수
-  | 'other';           // 기타
+  | 'IT 관련 장비'                // IT 하드웨어 (PC/노트북/서버)
+  | '사무 용품'                   // 사무용 가구 (책상/의자/캐비닛)
+  | '제조 장비'                   // 제조 장비
+  | '소모품'                     // 소모품 (일반)
+  | '아이템'                     // 홍보/마케팅 용품
+  | '기타';                      // 기타
 
 export type PurchaseMethod = 
   | 'direct'          // 직접구매
@@ -183,15 +180,12 @@ export const URGENCY_LABELS: Record<UrgencyLevel, string> = {
 };
 
 export const CATEGORY_LABELS: Record<ItemCategory, string> = {
-  office_supplies: '사무용품',
-  electronics: '전자기기',
-  furniture: '가구',
-  software: '소프트웨어',
-  equipment: '장비',
-  consumables: '소모품',
-  services: '서비스',
-  maintenance: '유지보수',
-  other: '기타',
+  'IT 관련 장비': "IT 관련 장비",
+  '사무 용품': "사무 용품",
+  '제조 장비': "제조 장비",
+  '소모품': "소모품",
+  '아이템': "아이템",
+  '기타': "기타"
 };
 
 export const METHOD_LABELS: Record<PurchaseMethod, string> = {

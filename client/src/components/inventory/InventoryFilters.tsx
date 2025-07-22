@@ -157,9 +157,11 @@ const InventoryFilters: React.FC<InventoryFiltersProps> = ({ onFilter }) => {
           onChange={(e) => handleFilterChange('category', e.target.value)}
         >
           <option value="">전체 카테고리</option>
-          <option value="전자제품">전자제품</option>
-          <option value="사무용품">사무용품</option>
+          <option value="IT 관련 장비">IT 관련 장비</option>
+          <option value="사무 용품">사무 용품</option>
+          <option value="제조 장비">제조 장비</option>
           <option value="소모품">소모품</option>
+          <option value="아이템">아이템</option>
           <option value="기타">기타</option>
         </FilterSelect>
 
