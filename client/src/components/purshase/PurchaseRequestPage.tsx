@@ -15,7 +15,7 @@ import {
   Clock,
   AlertCircle,
   FileText,
-  Search,
+  Upload,
   Filter
 } from 'lucide-react';
 
@@ -26,9 +26,12 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import Card from '../common/Card';
 import Modal from '../common/Modal';
 import Button from '../common/Button';
+import PurchaseRequestForm from './PurchaseRequestForm';
+import ExcelBulkUpload from './ExcelBulkUpload';
+import PurchaseRequestFilters from './PurchaseRequestFilters';
 
 // Services
-import api, { SearchFilters } from '../../services/api';
+import { purchaseApi, SearchFilters } from '../../services/api';
 
 // Types
 interface PurchaseRequest {
@@ -169,75 +172,6 @@ const FilterContainer = styled.div`
   @media (max-width: 1024px) {
     flex-direction: column;
     gap: 16px;
-  }
-`;
-
-const FilterGroup = styled.div`
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-  flex: 1;
-  
-  @media (max-width: 768px) {
-    width: 100%;
-    gap: 8px;
-  }
-`;
-
-const SearchInput = styled.div`
-  position: relative;
-  min-width: 280px;
-  
-  input {
-    width: 100%;
-    padding: 10px 12px 10px 40px;
-    border: 1px solid #d1d5db;
-    border-radius: 8px;
-    font-size: 14px;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-    
-    &:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-    
-    &::placeholder {
-      color: #9ca3af;
-    }
-  }
-  
-  .search-icon {
-    position: absolute;
-    left: 12px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #9ca3af;
-  }
-  
-  @media (max-width: 768px) {
-    min-width: 100%;
-  }
-`;
-
-const SelectInput = styled.select`
-  padding: 10px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  font-size: 14px;
-  background: white;
-  min-width: 120px;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
-  
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-  
-  @media (max-width: 768px) {
-    width: 100%;
   }
 `;
 
@@ -448,141 +382,16 @@ const EmptyState = styled.div`
   }
 `;
 
-// 필터 컴포넌트
-const PurchaseRequestFilters: React.FC<{
-  onFilter: (filters: SearchFilters) => void;
-  searchQuery: string;
-  statusFilter: RequestStatus;
-  urgencyFilter: UrgencyLevel;
-  departmentFilter: string;
-  onSearchChange: (value: string) => void;
-  onStatusChange: (value: RequestStatus) => void;
-  onUrgencyChange: (value: UrgencyLevel) => void;
-  onDepartmentChange: (value: string) => void;
-  onRefresh: () => void;
-  onExport: () => void;
-  isLoading: boolean;
-  isExporting: boolean;
-}> = ({
-  onFilter,
-  searchQuery,
-  statusFilter,
-  urgencyFilter,
-  departmentFilter,
-  onSearchChange,
-  onStatusChange,
-  onUrgencyChange,
-  onDepartmentChange,
-  onRefresh,
-  onExport,
-  isLoading,
-  isExporting
-}) => {
-  return (
-    <FilterContainer>
-      <FilterGroup>
-        <SearchInput>
-          <Search size={16} className="search-icon" />
-          <input
-            type="text"
-            placeholder="품목명, 요청자, 부서로 검색..."
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-          />
-        </SearchInput>
-        
-        <SelectInput
-          value={statusFilter}
-          onChange={(e) => onStatusChange(e.target.value as RequestStatus)}
-        >
-          <option value="all">전체 상태</option>
-          <option value="pending">승인 대기</option>
-          <option value="approved">승인됨</option>
-          <option value="rejected">거절됨</option>
-          <option value="in_review">검토중</option>
-        </SelectInput>
-        
-        <SelectInput
-          value={urgencyFilter}
-          onChange={(e) => onUrgencyChange(e.target.value as UrgencyLevel)}
-        >
-          <option value="all">전체 긴급도</option>
-          <option value="urgent">긴급</option>
-          <option value="high">높음</option>
-          <option value="normal">보통</option>
-          <option value="low">낮음</option>
-        </SelectInput>
-        
-        <SelectInput
-          value={departmentFilter}
-          onChange={(e) => onDepartmentChange(e.target.value)}
-        >
-          <option value="all">전체 부서</option>
-          <option value="총무부">총무부</option>
-          <option value="개발팀">개발팀</option>
-          <option value="사무관리팀">사무관리팀</option>
-          <option value="영업팀">영업팀</option>
-          <option value="마케팅팀">마케팅팀</option>
-        </SelectInput>
-      </FilterGroup>
-      
-      <ActionButtons>
-        <Button
-          variant="outline"
-          onClick={onRefresh}
-          disabled={isLoading}
-          size="sm"
-          title="새로고침"
-        >
-          <RefreshCw size={16} />
-          <span>새로고침</span>
-        </Button>
-        <Button
-          variant="secondary"
-          onClick={onExport}
-          disabled={isExporting}
-          loading={isExporting}
-          size="sm"
-          title="Excel 다운로드"
-        >
-          <Download size={16} />
-          <span>Excel 다운로드</span>
-        </Button>
-        <Button 
-          onClick={() => toast.info('구매 요청 추가 기능이 곧 구현됩니다.')}
-          size="sm"
-          title="구매 요청 추가"
-        >
-          <Plus size={16} />
-          <span>구매 요청</span>
-        </Button>
-      </ActionButtons>
-    </FilterContainer>
-  );
-};
-
 // 메인 컴포넌트
 const PurchaseRequestPage: React.FC = () => {
   const queryClient = useQueryClient();
   
   // State
   const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<RequestStatus>('all');
-  const [urgencyFilter, setUrgencyFilter] = useState<UrgencyLevel>('all');
-  const [departmentFilter, setDepartmentFilter] = useState('all');
-
-  // 필터 조합
-  const filters = useMemo(() => {
-    const result: SearchFilters = {};
-    
-    if (searchQuery.trim()) result.search = searchQuery.trim();
-    if (statusFilter !== 'all') result.status = statusFilter;
-    if (urgencyFilter !== 'all') result.urgency = urgencyFilter;
-    if (departmentFilter !== 'all') result.department = departmentFilter;
-    
-    return result;
-  }, [searchQuery, statusFilter, urgencyFilter, departmentFilter]);
+  const [filters, setFilters] = useState<SearchFilters>({});
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [editingRequest, setEditingRequest] = useState<PurchaseRequest | null>(null);
 
   // 구매 요청 목록 조회
   const { 
@@ -592,7 +401,7 @@ const PurchaseRequestPage: React.FC = () => {
     refetch 
   } = useQuery({
     queryKey: ['purchase-requests', currentPage, filters],
-    queryFn: () => api.purchase.getRequests({ page: currentPage, limit: 20, ...filters }),
+    queryFn: () => purchaseApi.getRequests({ page: currentPage, limit: 20, ...filters }),
     keepPreviousData: true,
     staleTime: 5 * 60 * 1000,
     retry: 2,
@@ -601,19 +410,32 @@ const PurchaseRequestPage: React.FC = () => {
   // 통계 데이터 조회
   const { data: statsData } = useQuery({
     queryKey: ['purchase-requests-stats'],
-    queryFn: () => api.purchase.getStats(),
+    queryFn: () => purchaseApi.getStats(),
     staleTime: 5 * 60 * 1000,
   });
 
-  // Export Mutation - createObjectURL 제거
+  // Export Mutation
   const exportMutation = useMutation({
-    mutationFn: () => api.purchase.exportRequests(filters),
+    mutationFn: () => purchaseApi.exportRequests(filters),
     onSuccess: () => {
       toast.success('Excel 파일이 다운로드되었습니다.');
     },
     onError: (error) => {
       console.error('Export error:', error);
       toast.error('Excel 다운로드에 실패했습니다.');
+    },
+  });
+
+  // 삭제 Mutation
+  const deleteMutation = useMutation({
+    mutationFn: purchaseApi.deleteRequest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      toast.success('구매 요청이 삭제되었습니다.');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
     },
   });
 
@@ -691,21 +513,21 @@ const PurchaseRequestPage: React.FC = () => {
         <ActionButtonGroup>
           <IconButton 
             className="view"
-            onClick={() => toast.info(`상세보기: ${item.itemName}`)}
+            onClick={() => handleView(item)}
             title="상세보기"
           >
             <Eye size={14} />
           </IconButton>
           <IconButton 
             className="edit"
-            onClick={() => toast.info(`수정: ${item.itemName}`)}
+            onClick={() => handleEdit(item)}
             title="수정"
           >
             <Edit size={14} />
           </IconButton>
           <IconButton 
             className="delete"
-            onClick={() => toast.info(`삭제: ${item.itemName}`)}
+            onClick={() => handleDelete(item.id)}
             title="삭제"
           >
             <Trash2 size={14} />
@@ -716,20 +538,52 @@ const PurchaseRequestPage: React.FC = () => {
   ], []);
 
   // 이벤트 핸들러
+  const handleView = (request: PurchaseRequest) => {
+    toast.info(`상세보기: ${request.itemName}`);
+    // TODO: 상세보기 모달 구현
+  };
+
+  const handleEdit = (request: PurchaseRequest) => {
+    setEditingRequest(request);
+    setIsFormModalOpen(true);
+  };
+
+  const handleDelete = async (requestId: number) => {
+    if (window.confirm('정말로 이 구매 요청을 삭제하시겠습니까?')) {
+      deleteMutation.mutate(requestId);
+    }
+  };
+
   const handleExport = () => {
     exportMutation.mutate();
   };
 
   const handleRefresh = () => {
-    queryClient.invalidateQueries(['purchase-requests']);
-    queryClient.invalidateQueries(['purchase-requests-stats']);
+    queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+    queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
     refetch();
   };
 
-  // 필터 변경시 첫 페이지로 이동
-  React.useEffect(() => {
-    setCurrentPage(1);
-  }, [filters]);
+  const handleFilterChange = (newFilters: SearchFilters) => {
+    setFilters(newFilters);
+    setCurrentPage(1); // 필터 변경시 첫 페이지로 이동
+  };
+
+  const handleFormSuccess = () => {
+    setIsFormModalOpen(false);
+    setEditingRequest(null);
+    handleRefresh();
+  };
+
+  const handleFormCancel = () => {
+    setIsFormModalOpen(false);
+    setEditingRequest(null);
+  };
+
+  const handleExcelSuccess = () => {
+    setIsExcelModalOpen(false);
+    handleRefresh();
+  };
 
   // 데이터 추출
   const requests = requestsData?.data?.items || [];
@@ -830,21 +684,50 @@ const PurchaseRequestPage: React.FC = () => {
       <ContentCard>
         {/* 필터 섹션 */}
         <FilterSection>
-          <PurchaseRequestFilters
-            onFilter={() => {}} // 실시간 필터링이므로 불필요
-            searchQuery={searchQuery}
-            statusFilter={statusFilter}
-            urgencyFilter={urgencyFilter}
-            departmentFilter={departmentFilter}
-            onSearchChange={setSearchQuery}
-            onStatusChange={setStatusFilter}
-            onUrgencyChange={setUrgencyFilter}
-            onDepartmentChange={setDepartmentFilter}
-            onRefresh={handleRefresh}
-            onExport={handleExport}
-            isLoading={isLoading}
-            isExporting={exportMutation.isPending}
-          />
+          <FilterContainer>
+            <PurchaseRequestFilters onFilter={handleFilterChange} />
+            
+            <ActionButtons>
+              <Button
+                variant="outline"
+                onClick={handleRefresh}
+                disabled={isLoading}
+                size="sm"
+                title="새로고침"
+              >
+                <RefreshCw size={16} />
+                <span>새로고침</span>
+              </Button>
+              <Button
+                variant="secondary"
+                onClick={handleExport}
+                disabled={exportMutation.isPending}
+                loading={exportMutation.isPending}
+                size="sm"
+                title="Excel 다운로드"
+              >
+                <Download size={16} />
+                <span>Excel 다운로드</span>
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setIsExcelModalOpen(true)}
+                size="sm"
+                title="Excel 일괄 업로드"
+              >
+                <Upload size={16} />
+                <span>Excel 업로드</span>
+              </Button>
+              <Button 
+                onClick={() => setIsFormModalOpen(true)}
+                size="sm"
+                title="구매 요청 추가"
+              >
+                <Plus size={16} />
+                <span>구매 요청</span>
+              </Button>
+            </ActionButtons>
+          </FilterContainer>
         </FilterSection>
 
         {/* 테이블 컨테이너 */}
@@ -856,10 +739,16 @@ const PurchaseRequestPage: React.FC = () => {
               <div className="empty-message">
                 새로운 구매 요청을 등록하여 시작해보세요.
               </div>
-              <Button onClick={() => toast.info('구매 요청 추가 기능이 곧 구현됩니다.')}>
-                <Plus size={16} />
-                첫 구매 요청 등록
-              </Button>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center' }}>
+                <Button onClick={() => setIsFormModalOpen(true)}>
+                  <Plus size={16} />
+                  개별 등록
+                </Button>
+                <Button variant="outline" onClick={() => setIsExcelModalOpen(true)}>
+                  <Upload size={16} />
+                  Excel 업로드
+                </Button>
+              </div>
             </EmptyState>
           ) : (
             <>
@@ -876,13 +765,34 @@ const PurchaseRequestPage: React.FC = () => {
                   currentPage={currentPage}
                   totalPages={totalPages}
                   onPageChange={setCurrentPage}
-                  totalItems={totalItems}
                 />
               )}
             </>
           )}
         </TableContainer>
       </ContentCard>
+
+      {/* 구매 요청 등록/수정 모달 */}
+      <Modal
+        isOpen={isFormModalOpen}
+        onClose={handleFormCancel}
+        title={editingRequest ? '구매 요청 수정' : '새 구매 요청 등록'}
+        size="xl"
+      >
+        <PurchaseRequestForm
+          onSuccess={handleFormSuccess}
+          onCancel={handleFormCancel}
+          initialData={editingRequest || undefined}
+          isEdit={!!editingRequest}
+        />
+      </Modal>
+
+      {/* Excel 일괄 업로드 모달 */}
+      <ExcelBulkUpload
+        isOpen={isExcelModalOpen}
+        onClose={() => setIsExcelModalOpen(false)}
+        onSuccess={handleExcelSuccess}
+      />
     </Container>
   );
 };

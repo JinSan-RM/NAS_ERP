@@ -15,7 +15,7 @@ import Modal from '../common/Modal';
 import InventoryFilters from './InventoryFilters';
 
 // Services
-import { inventoryApi } from '../../services/api';
+import api from '../../services/api';
 
 // Types
 import { TableColumn, SearchFilters } from '../../types';
@@ -153,7 +153,7 @@ const InventoryPage: React.FC = () => {
     refetch 
   } = useQuery({
     queryKey: ['inventory', currentPage, filters],
-    queryFn: () => inventoryApi.getItems(currentPage, 20, filters),
+    queryFn: () => api.inventory.getItems(currentPage, 20, filters),
     keepPreviousData: true,
     staleTime: 5 * 60 * 1000,
     retry: 3,
@@ -162,13 +162,13 @@ const InventoryPage: React.FC = () => {
   // 재고 통계 조회
   const { data: statsData } = useQuery({
     queryKey: ['inventory-stats'],
-    queryFn: () => inventoryApi.getStats(),
+    queryFn: () => api.inventory.getStats(),
     staleTime: 5 * 60 * 1000,
   });
 
   // 삭제 Mutation
   const deleteItemMutation = useMutation({
-    mutationFn: inventoryApi.deleteItem,
+    mutationFn: api.inventory.deleteItem,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['inventory'] });
       queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
@@ -181,7 +181,7 @@ const InventoryPage: React.FC = () => {
 
   // Excel 내보내기 Mutation
   const exportMutation = useMutation({
-    mutationFn: () => inventoryApi.exportData('inventory'),
+    mutationFn: () => api.inventory.exportData('inventory'),
     onSuccess: (blob: Blob) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');

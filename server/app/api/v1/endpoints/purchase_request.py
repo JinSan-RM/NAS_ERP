@@ -94,14 +94,16 @@ def read_purchase_request_stats(db: Session = Depends(get_db)):
     stats = crud.purchase_request.get_stats(db=db)
     
     # snake_case로 반환 (alias를 사용해서 camelCase도 지원)
+    print("🐛 CRUD에서 반환된 stats:", stats)
+    # return stats
     return {
         "total": stats.get("total", 0),
         "pending": stats.get("pending", 0),
         "approved": stats.get("approved", 0),
         "rejected": stats.get("rejected", 0),
-        "this_month": stats.get("thisMonth", stats.get("this_month", 0)),  # 둘 다 지원
-        "total_budget": stats.get("totalBudget", stats.get("total_budget", 0.0)),  # 둘 다 지원
-        "average_approval_time": stats.get("averageProcessingTime", stats.get("average_approval_time", None))  # 둘 다 지원
+        "this_month": stats.get("this_month", 0),           # camelCase 제거
+        "total_budget": stats.get("total_budget", 0.0),     # camelCase 제거
+        "average_approval_time": stats.get("average_approval_time", None)  # camelCase 제거
     }
 
 @router.get("/categories", response_model=List[str])

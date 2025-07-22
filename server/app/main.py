@@ -29,12 +29,11 @@ print(f"✅ Loaded ALLOWED_ORIGINS: {allowed_origins}")  # 로그 추가 - 서�
 # CORS 미들웨어 추가 (기존 유지, 하지만 allow_origins에 * 추가로 테스트)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=allowed_origins + ["*"],  # 테스트용 와일드카드 추가 (프로덕션에서 제거)
+    allow_origins=["*"],  # 개발용 - 모든 도메인 허용
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 # Trusted Host 미들웨어
 if hasattr(settings, 'TRUSTED_HOSTS') and settings.TRUSTED_HOSTS:
