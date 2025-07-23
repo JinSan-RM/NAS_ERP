@@ -1,6 +1,6 @@
 # server/app/crud/purchase_request.py
 from typing import List, Optional, Dict, Any
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, or_, and_, extract
 
@@ -21,8 +21,8 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
         obj_in_data = obj_in.dict()
         
         # 총 예산 계산
-        if obj_in_data.get('estimated_price') and obj_in_data.get('quantity'):
-            obj_in_data['total_budget'] = obj_in_data['estimated_price'] * obj_in_data['quantity']
+        if obj_in_data.get('estimated_unit_price') and obj_in_data.get('quantity'):
+            obj_in_data['total_budget'] = obj_in_data['estimated_unit_price'] * obj_in_data['quantity']
         
         # 시스템 필드 설정
         obj_in_data['created_at'] = datetime.now()
@@ -37,7 +37,7 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
         db_obj.request_number = db_obj.generate_request_number()
         
         # 우선순위 점수 계산
-        db_obj.calculate_priority_score()
+        # db_obj.calculate_priority_score()
         
         db.commit()
         db.refresh(db_obj)
@@ -49,32 +49,46 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
         *,
         db_obj: PurchaseRequest,
         obj_in: PurchaseRequestUpdate
-    ) -> PurchaseRequest:
+        ) -> PurchaseRequest:
         """구매 요청 업데이트"""
-        obj_data = obj_in.dict(exclude_unset=True)
-        
-        # 가격이나 수량이 변경되면 총 예산 재계산
-        if 'estimated_price' in obj_data or 'quantity' in obj_data:
-            estimated_price = obj_data.get('estimated_price', db_obj.estimated_price)
-            quantity = obj_data.get('quantity', db_obj.quantity)
-            if estimated_price and quantity:
-                obj_data['total_budget'] = estimated_price * quantity
-        
-        # 시스템 필드 업데이트
-        obj_data['updated_at'] = datetime.now()
-        
-        # 업데이트 실행
-        for field in obj_data:
-            if hasattr(db_obj, field):
-                setattr(db_obj, field, obj_data[field])
-        
-        # 우선순위 점수 재계산
-        db_obj.calculate_priority_score()
-        
-        db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
-        return db_obj
+        try:
+            print("=== UPDATE 시작 ===")
+            print(f"db_obj.created_at: {db_obj.created_at} (type: {type(db_obj.created_at)})")
+            print(f"db_obj.updated_at: {db_obj.updated_at} (type: {type(db_obj.updated_at)})")
+            
+            obj_data = obj_in.dict(exclude_unset=True)
+            print(f"업데이트할 데이터: {obj_data}")
+            
+            # 가격이나 수량이 변경되면 총 예산 재계산
+            if 'estimated_unit_price' in obj_data or 'quantity' in obj_data:
+                print("=== 예산 재계산 시작 ===")
+                estimated_unit_price = obj_data.get('estimated_unit_price', db_obj.estimated_unit_price)
+                quantity = obj_data.get('quantity', db_obj.quantity)
+                if estimated_unit_price and quantity:
+                    obj_data['total_budget'] = estimated_unit_price * quantity
+                    print(f"계산된 total_budget: {obj_data['total_budget']}")
+            
+            print("=== 필드 업데이트 시작 ===")
+            # 업데이트 실행
+            for field in obj_data:
+                if hasattr(db_obj, field):
+                    print(f"업데이트 중: {field} = {obj_data[field]}")
+                    setattr(db_obj, field, obj_data[field])
+            
+            print("=== DB 커밋 시작 ===")
+            db.add(db_obj)
+            db.commit()
+            db.refresh(db_obj)
+            print("=== UPDATE 완료 ===")
+            return db_obj
+            
+        except Exception as e:
+            print(f"=== UPDATE 오류 발생 ===")
+            print(f"오류 타입: {type(e)}")
+            print(f"오류 메시지: {str(e)}")
+            import traceback
+            print(f"상세 스택트레이스:\n{traceback.format_exc()}")
+            raise e
     
     def get_by_request_number(self, db: Session, *, request_number: str) -> Optional[PurchaseRequest]:
         """요청 번호로 구매 요청 조회"""
@@ -385,8 +399,8 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
             obj_in_data = item_data.dict()
             
             # 총 예산 계산
-            if obj_in_data.get('estimated_price') and obj_in_data.get('quantity'):
-                obj_in_data['total_budget'] = obj_in_data['estimated_price'] * obj_in_data['quantity']
+            if obj_in_data.get('estimated_unit_price') and obj_in_data.get('quantity'):
+                obj_in_data['total_budget'] = obj_in_data['estimated_unit_price'] * obj_in_data['quantity']
             
             # 시스템 필드 설정
             obj_in_data['created_at'] = datetime.now()
@@ -402,7 +416,7 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
         # 각 객체에 대해 요청 번호 생성 및 우선순위 계산
         for db_obj in db_objects:
             db_obj.request_number = db_obj.generate_request_number()
-            db_obj.calculate_priority_score()
+            # db_obj.calculate_priority_score()
         
         db.commit()
         

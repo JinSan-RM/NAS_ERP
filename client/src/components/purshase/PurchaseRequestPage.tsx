@@ -29,6 +29,9 @@ import Button from '../common/Button';
 import PurchaseRequestForm from './PurchaseRequestForm';
 import ExcelBulkUpload from './ExcelBulkUpload';
 import PurchaseRequestFilters from './PurchaseRequestFilters';
+import RequestDetailModal from './RequestDetailModal';
+import { useNavigate } from 'react-router-dom';
+import { Package2, CheckCircle2 } from 'lucide-react';
 
 // Services
 import { purchaseApi, SearchFilters } from '../../services/api';
@@ -330,6 +333,23 @@ const IconButton = styled.button`
     background: #f0fdf4;
     color: #16a34a;
   }
+  &.receipt:hover {
+    background: #059669 !important;
+    transform: scale(1.05);
+  }
+  
+  &.receipt {
+    animation: pulse-green 2s infinite;
+  }
+  
+  @keyframes pulse-green {
+    0%, 100% { 
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); 
+    }
+    50% { 
+      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3); 
+    }
+  }
   
   svg {
     flex-shrink: 0;
@@ -384,6 +404,7 @@ const EmptyState = styled.div`
 
 // 메인 컴포넌트
 const PurchaseRequestPage: React.FC = () => {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   
   // State
@@ -392,6 +413,8 @@ const PurchaseRequestPage: React.FC = () => {
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [editingRequest, setEditingRequest] = useState<PurchaseRequest | null>(null);
+  const [viewingRequest, setViewingRequest] = useState<PurchaseRequest | null>(null);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
 
   // 구매 요청 목록 조회
   const { 
@@ -529,7 +552,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     {
       key: 'actions',
       label: '작업',
-      width: '120px',
+      width: '160px', // 폭을 늘림
       render: (_, item) => (
         <ActionButtonGroup>
           <IconButton 
@@ -539,20 +562,44 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
           >
             <Eye size={14} />
           </IconButton>
-          <IconButton 
-            className="edit"
-            onClick={() => handleEdit(item)}
-            title="수정"
-          >
-            <Edit size={14} />
-          </IconButton>
-          <IconButton 
-            className="delete"
-            onClick={() => handleDelete(item.id)}
-            title="삭제"
-          >
-            <Trash2 size={14} />
-          </IconButton>
+          
+          {/* 승인된 상태일 때만 수령완료 버튼 표시 */}
+          {item.status === 'APPROVED' && (
+            <IconButton 
+              className="receipt"
+              onClick={() => handleReceiptComplete(item)}
+              title="수령완료"
+              style={{
+                backgroundColor: '#10b981',
+                color: 'white',
+                borderRadius: '6px'
+              }}
+            >
+              <Package2 size={14} />
+            </IconButton>
+          )}
+          
+          {/* 편집 가능한 상태일 때만 수정 버튼 표시 */}
+          {['DRAFT', 'SUBMITTED', 'REJECTED'].includes(item.status) && (
+            <IconButton 
+              className="edit"
+              onClick={() => handleEdit(item)}
+              title="수정"
+            >
+              <Edit size={14} />
+            </IconButton>
+          )}
+          
+          {/* 삭제 가능한 상태일 때만 삭제 버튼 표시 */}
+          {item.status !== 'COMPLETED' && (
+            <IconButton 
+              className="delete"
+              onClick={() => handleDelete(item.id)}
+              title="삭제"
+            >
+              <Trash2 size={14} />
+            </IconButton>
+          )}
         </ActionButtonGroup>
       ),
     },
@@ -560,8 +607,9 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
 
   // 이벤트 핸들러
   const handleView = (request: PurchaseRequest) => {
-    toast.info(`상세보기: ${request.itemName}`);
-    // TODO: 상세보기 모달 구현
+    console.log('상세보기 데이터:', request); // 디버깅용
+    setViewingRequest(request);
+    setIsDetailModalOpen(true);
   };
 
   const handleEdit = (request: PurchaseRequest) => {
@@ -604,6 +652,47 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
   const handleExcelSuccess = () => {
     setIsExcelModalOpen(false);
     handleRefresh();
+  };
+
+  // 3. 🔥 수령완료 처리 함수 추가
+  const handleReceiptComplete = async (request: any) => {
+    try {
+      // 수령 데이터 생성
+      const receiptData = {
+        purchaseRequestId: request.id,
+        itemName: request.item_name,
+        expectedQuantity: request.quantity,
+        receivedQuantity: request.quantity, // 기본값으로 요청수량과 동일
+        receiverName: '현재사용자', // 실제로는 로그인 사용자
+        department: request.department,
+        receivedDate: new Date().toISOString(),
+        condition: 'excellent', // 기본 상태
+        notes: `구매요청 #${request.id}에서 자동 생성됨`
+      };
+
+      // 수령 기록 생성 (receiptApi 사용)
+      await receiptApi.createReceipt(receiptData);
+      
+      // 구매 요청 상태를 '완료'로 업데이트
+      await purchaseApi.updateRequest(request.id, { 
+        status: 'COMPLETED' 
+      });
+
+      toast.success('수령이 완료되었습니다! 수령 관리 페이지로 이동합니다.');
+      
+      // 데이터 새로고침
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      
+      // 1초 후 수령 관리 페이지로 이동
+      setTimeout(() => {
+        navigate('/receipts');
+      }, 1000);
+      
+    } catch (error: any) {
+      console.error('수령완료 처리 실패:', error);
+      toast.error(error.response?.data?.message || '수령완료 처리 중 오류가 발생했습니다.');
+    }
   };
 
   // 데이터 추출
@@ -814,7 +903,26 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         onClose={() => setIsExcelModalOpen(false)}
         onSuccess={handleExcelSuccess}
       />
+
+      {/* 상세보기 모달 */}
+      {viewingRequest && (
+        <RequestDetailModal
+          request={viewingRequest}
+          isOpen={isDetailModalOpen}
+          onClose={() => {
+            setIsDetailModalOpen(false);
+            setViewingRequest(null);
+          }}
+          onEdit={() => {
+            setEditingRequest(viewingRequest);
+            setIsFormModalOpen(true);
+            setIsDetailModalOpen(false);
+            setViewingRequest(null);
+          }}
+        />
+      )}
     </Container>
+    
   );
 };
 

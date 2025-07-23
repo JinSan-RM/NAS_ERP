@@ -25,7 +25,7 @@ class PurchaseRequestBase(BaseModel):
     phone_number: Optional[str] = Field(None, max_length=20, description="연락처")
     
     project: Optional[str] = Field(None, max_length=200, description="프로젝트")
-    budget_code: Optional[str] = Field(None, max_length=50, description="예산 코드")
+    budget_code: Optional[str] = Field(None, max_length=50, description="링크")
     cost_center: Optional[str] = Field(None, max_length=50, description="코스트 센터")
     
     preferred_supplier: Optional[str] = Field(None, max_length=200, description="선호 공급업체")
@@ -70,7 +70,7 @@ class PurchaseRequestUpdate(BaseModel):
     phone_number: Optional[str] = Field(None, max_length=20, description="연락처")
     
     project: Optional[str] = Field(None, max_length=200, description="프로젝트")
-    budget_code: Optional[str] = Field(None, max_length=50, description="예산 코드")
+    budget_code: Optional[str] = Field(None, max_length=50, description="링크")
     cost_center: Optional[str] = Field(None, max_length=50, description="코스트 센터")
     
     preferred_supplier: Optional[str] = Field(None, max_length=200, description="선호 공급업체")

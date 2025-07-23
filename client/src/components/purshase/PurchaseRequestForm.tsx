@@ -1,5 +1,5 @@
-// client/src/components/purchase/PurchaseRequestForm.tsx
-import React, { useState } from 'react';
+// client/src/components/purchase/PurchaseRequestForm.tsx - 수정된 버전
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -27,10 +27,28 @@ interface PurchaseRequestFormData {
   attachments?: File[];
 }
 
+interface PurchaseRequest {
+  id: number;
+  item_name: string;
+  specifications?: string;
+  quantity: number;
+  estimated_unit_price?: number;
+  preferred_supplier?: string;
+  category: string;
+  urgency: string;
+  justification: string;
+  department: string;
+  project?: string;
+  budget_code?: string;
+  expected_delivery_date?: string;
+  purchase_method?: string;
+  // 기타 필드들...
+}
+
 interface PurchaseRequestFormProps {
   onSuccess: () => void;
   onCancel: () => void;
-  initialData?: Partial<PurchaseRequestFormData>;
+  initialData?: PurchaseRequest;
   isEdit?: boolean;
 }
 
@@ -95,75 +113,6 @@ const TextArea = styled.textarea<{ hasError?: boolean }>`
   }
 `;
 
-const FileUploadArea = styled.div<{ isDragOver: boolean }>`
-  border: 2px dashed ${props => props.isDragOver ? props.theme.colors.primary : props.theme.colors.border};
-  border-radius: 8px;
-  padding: 20px;
-  text-align: center;
-  background: ${props => props.isDragOver ? props.theme.colors.primary + '05' : props.theme.colors.background};
-  transition: all 0.3s ease;
-  cursor: pointer;
-  
-  &:hover {
-    border-color: ${props => props.theme.colors.primary};
-    background: ${props => props.theme.colors.primary}05;
-  }
-  
-  .upload-text {
-    color: ${props => props.theme.colors.textSecondary};
-    font-size: 14px;
-    margin-bottom: 8px;
-  }
-  
-  .upload-hint {
-    color: ${props => props.theme.colors.textSecondary};
-    font-size: 12px;
-  }
-`;
-
-const FileList = styled.div`
-  margin-top: 12px;
-  
-  .file-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 12px;
-    background: ${props => props.theme.colors.background};
-    border-radius: 6px;
-    margin-bottom: 8px;
-    
-    .file-info {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      
-      .file-name {
-        font-size: 14px;
-        color: ${props => props.theme.colors.text};
-      }
-      
-      .file-size {
-        font-size: 12px;
-        color: ${props => props.theme.colors.textSecondary};
-      }
-    }
-    
-    .remove-btn {
-      background: none;
-      border: none;
-      color: ${props => props.theme.colors.error};
-      cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
-      
-      &:hover {
-        background: ${props => props.theme.colors.error}20;
-      }
-    }
-  }
-`;
-
 const ButtonGroup = styled.div`
   display: flex;
   justify-content: flex-end;
@@ -182,43 +131,41 @@ const ErrorMessage = styled.div`
   gap: 4px;
 `;
 
-
-
 const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
   onSuccess,
   onCancel,
   initialData,
   isEdit = false
 }) => {
-
-  // 카테고리 옵션 수정 (백엔드 enum과 일치)
+  // 카테고리 옵션 (백엔드 enum과 일치)
   const categoryOptions = [
-  { value: 'OFFICE_SUPPLIES', label: '사무 용품' },
-  { value: 'ELECTRONICS', label: '전자제품/IT 장비' },
-  { value: 'FURNITURE', label: '가구' },
-  { value: 'SOFTWARE', label: '소프트웨어' },
-  { value: 'MAINTENANCE', label: '유지보수' },
-  { value: 'SERVICES', label: '서비스' },
-  { value: 'OTHER', label: '기타' }
+    { value: 'OFFICE_SUPPLIES', label: '사무 용품' },
+    { value: 'ELECTRONICS', label: '전자제품/IT 장비' },
+    { value: 'FURNITURE', label: '가구' },
+    { value: 'SOFTWARE', label: '소프트웨어' },
+    { value: 'MAINTENANCE', label: '유지보수' },
+    { value: 'SERVICES', label: '서비스' },
+    { value: 'OTHER', label: '기타' }
   ];
 
-  // 긴급도 옵션 수정 (백엔드 enum과 일치)
+  // 긴급도 옵션 (백엔드 enum과 일치)
   const urgencyOptions = [
-    { value: 'low', label: '낮음' },
-    { value: 'normal', label: '보통' },
-    { value: 'high', label: '높음' },
-    { value: 'urgent', label: '긴급' },
-    { value: 'emergency', label: '응급' },
+    { value: 'LOW', label: '낮음' },
+    { value: 'NORMAL', label: '보통' },
+    { value: 'HIGH', label: '높음' },
+    { value: 'URGENT', label: '긴급' },
+    { value: 'EMERGENCY', label: '응급' }
   ];
 
-  // 구매 방법 옵션 수정 (백엔드 enum과 일치)
-  const purchaseMethodOptions = [
-    { value: 'direct', label: '직접구매' },
-    { value: 'quotation', label: '견적요청' },
-    { value: 'contract', label: '계약' },
-    { value: 'framework', label: '단가계약' },
-    { value: 'marketplace', label: '마켓플레이스' },
+  // 구매 방법 옵션 (백엔드 enum과 일치)
+    const purchaseMethodOptions = [
+    { value: 'DIRECT', label: '직접구매' },
+    { value: 'QUOTATION', label: '견적요청' },
+    { value: 'CONTRACT', label: '계약' },
+    { value: 'FRAMEWORK', label: '단가계약' },
+    { value: 'MARKETPLACE', label: '마켓플레이스' }
   ];
+
 
   const departmentOptions = [
     { value: 'H/W 개발팀', label: 'H/W 개발팀' },
@@ -226,62 +173,91 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     { value: '총무부', label: '총무부' },
     { value: '사무관리팀', label: '사무관리팀' },
     { value: '영업팀', label: '영업팀' },
-    // { value: '마케팅팀', label: '마케팅팀' },
     { value: '인사팀', label: '인사팀' },
   ];
+
   const queryClient = useQueryClient();
-  const [dragOver, setDragOver] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  const [formData, setFormData] = useState({
-    itemName: initialData?.itemName || '',
-    specifications: initialData?.specifications || '',
-    quantity: initialData?.quantity || 1,
-    estimatedPrice: initialData?.estimatedPrice || 0,
-    preferredSupplier: initialData?.preferredSupplier || '',
-    category: initialData?.category || '',
-    urgency: initialData?.urgency || 'normal',
-    justification: initialData?.justification || '',
-    department: initialData?.department || 'S/W 개발팀',
-    project: initialData?.project || '',
-    budgetCode: initialData?.budgetCode || '',
-    expectedDeliveryDate: initialData?.expectedDeliveryDate || '',
-    purchaseMethod: initialData?.purchaseMethod || 'direct',
-  });
+  // 🔥 수정: 초기 데이터 처리 개선
+  const getInitialFormData = (): PurchaseRequestFormData => {
+    if (!initialData) {
+      return {
+        itemName: '',
+        specifications: '',
+        quantity: 1,
+        estimatedPrice: 0,
+        preferredSupplier: '',
+        category: '',
+        urgency: 'NORMAL',
+        justification: '',
+        department: 'S/W 개발팀',
+        project: '',
+        budgetCode: '',
+        expectedDeliveryDate: '',
+        purchaseMethod: 'DIRECT',
+      };
+    }
 
+    // 백엔드 데이터를 프론트엔드 형식으로 변환
+    return {
+      itemName: initialData.item_name || '',
+      specifications: initialData.specifications || '',
+      quantity: initialData.quantity || 1,
+      estimatedPrice: initialData.estimated_unit_price || 0,
+      preferredSupplier: initialData.preferred_supplier || '',
+      category: initialData.category || '',
+      urgency: initialData.urgency || 'NORMAL',
+      justification: initialData.justification || '',
+      department: initialData.department || '',
+      project: initialData.project || '',
+      budgetCode: initialData.budget_code || '',
+      expectedDeliveryDate: initialData.expected_delivery_date 
+        ? new Date(initialData.expected_delivery_date).toISOString().split('T')[0] 
+        : '',
+      purchaseMethod: initialData.purchase_method || 'DIRECT',
+    };
+  };
+
+  const [formData, setFormData] = useState<PurchaseRequestFormData>(getInitialFormData());
+
+  // 🔥 수정: initialData가 변경될 때마다 폼 데이터 업데이트
+  useEffect(() => {
+    setFormData(getInitialFormData());
+  }, [initialData]);
+
+  // 생성 Mutation
   const createMutation = useMutation({
     mutationFn: purchaseApi.createRequest,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      toast.success('구매 요청이 등록되었습니다.');
+      toast.success(isEdit ? '구매 요청이 수정되었습니다.' : '구매 요청이 등록되었습니다.');
       onSuccess();
     },
     onError: (error: any) => {
-    // 디버깅을 위한 상세 로그 추가
-    console.error('=== 구매 요청 생성 실패 ===');
-    console.error('전체 에러 객체:', error);
-    console.error('HTTP 상태 코드:', error.response?.status);
-    console.error('에러 응답 데이터:', error.response?.data);
-    console.error('에러 메시지:', error.response?.data?.message);
-    console.error('에러 디테일:', error.response?.data?.detail);
-    
-    // detail 배열의 각 항목을 개별적으로 로깅
-    if (error.response?.data?.detail && Array.isArray(error.response.data.detail)) {
-      console.error('=== 상세 검증 오류들 ===');
-      error.response.data.detail.forEach((item, index) => {
-        console.error(`오류 ${index + 1}:`, item);
-        console.error(`- 타입:`, item.type);
-        console.error(`- 메시지:`, item.msg);
-        console.error(`- 입력값:`, item.input);
-        console.error(`- 위치:`, item.loc);
-      });
-    }
-    
-    console.error('validation errors:', error.response?.data?.errors);
-    
-    toast.error(error.response?.data?.message || '등록 중 오류가 발생했습니다.');
-  },
+      console.error('=== 구매 요청 처리 실패 ===');
+      console.error('전체 에러 객체:', error);
+      console.error('HTTP 상태 코드:', error.response?.status);
+      console.error('에러 응답 데이터:', error.response?.data);
+      
+      toast.error(error.response?.data?.message || '처리 중 오류가 발생했습니다.');
+    },
+  });
+
+  // 🔥 수정: 수정 Mutation 추가
+  const updateMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => purchaseApi.updateRequest(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      toast.success('구매 요청이 수정되었습니다.');
+      onSuccess();
+    },
+    onError: (error: any) => {
+      console.error('구매 요청 수정 실패:', error);
+      toast.error(error.response?.data?.message || '수정 중 오류가 발생했습니다.');
+    },
   });
 
   const validateForm = (): boolean => {
@@ -315,47 +291,48 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     return Object.keys(newErrors).length === 0;
   };
 
-// handleSubmit 함수 수정
-const handleSubmit = (e: React.FormEvent) => {
-  e.preventDefault();
-  
-  if (!validateForm()) {
-    toast.error('입력 정보를 확인해주세요.');
-    return;
-  }
-  
+  // 🔥 수정: handleSubmit 함수 개선
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      toast.error('입력 정보를 확인해주세요.');
+      return;
+    }
 
-  // 백엔드 API에 맞는 데이터 형식으로 변환
-  const submitData = {
-    item_name: formData.itemName,
-    specifications: formData.specifications,
-    quantity: Number(formData.quantity),
-    unit: '개',
-    estimated_unit_price: Number(formData.estimatedPrice),
-    total_budget: Number(formData.quantity) * Number(formData.estimatedPrice),
-    currency: 'KRW',
-    category: formData.category,
-    urgency: formData.urgency,
-    purchase_method: formData.purchaseMethod,
-    requester_name: '현재사용자',
-    department: formData.department,
-    expected_delivery_date: formData.expectedDeliveryDate ? new Date(`${formData.expectedDeliveryDate}T00:00:00`).toISOString() : undefined,
-    justification: formData.justification,
+    // 백엔드 API에 맞는 데이터 형식으로 변환
+    const submitData = {
+      item_name: formData.itemName,
+      specifications: formData.specifications,
+      quantity: Number(formData.quantity),
+      unit: '개',
+      estimated_unit_price: Number(formData.estimatedPrice),
+      total_budget: Number(formData.quantity) * Number(formData.estimatedPrice),
+      currency: 'KRW',
+      category: formData.category,
+      urgency: formData.urgency,
+      purchase_method: formData.purchaseMethod,
+      requester_name: '현재사용자',
+      department: formData.department,
+      expected_delivery_date: formData.expectedDeliveryDate ? new Date(`${formData.expectedDeliveryDate}T00:00:00`).toISOString() : undefined,
+      justification: formData.justification,
+      preferred_supplier: formData.preferredSupplier,
+      project: formData.project,
+      budget_code: formData.budgetCode,
+    };
+
+    console.log('=== 전송할 데이터 ===');
+    console.log('submitData:', submitData);
+    console.log('isEdit:', isEdit);
+    console.log('initialData?.id:', initialData?.id);
+
+    // 수정 모드면 업데이트, 아니면 생성
+    if (isEdit && initialData?.id) {
+      updateMutation.mutate({ id: initialData.id, data: submitData });
+    } else {
+      createMutation.mutate(submitData);
+    }
   };
-
-  // 디버깅을 위한 로그 추가
-  console.log('=== 전송할 데이터 ===');
-  console.log('submitData:', submitData);
-  console.log('카테고리 값:', formData.category);
-  console.log('긴급도 값:', formData.urgency);
-  console.log('구매 방법 값:', formData.purchaseMethod);
-  console.log('숫자 변환 확인:');
-  console.log('- quantity:', Number(formData.quantity), typeof Number(formData.quantity));
-  console.log('- estimated_unit_price:', Number(formData.estimatedPrice), typeof Number(formData.estimatedPrice));
-  console.log('- total_budget:', Number(formData.quantity) * Number(formData.estimatedPrice));
-
-  createMutation.mutate(submitData);
-};
 
   const handleChange = (field: keyof PurchaseRequestFormData, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -370,53 +347,7 @@ const handleSubmit = (e: React.FormEvent) => {
     }
   };
 
-  const handleFileSelect = (files: FileList | null) => {
-    if (!files) return;
-    
-    const fileArray = Array.from(files);
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    const allowedTypes = ['image/jpeg', 'image/png', 'application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'];
-    
-    const validFiles = fileArray.filter(file => {
-      if (file.size > maxSize) {
-        toast.error(`${file.name}: 파일 크기는 10MB를 초과할 수 없습니다.`);
-        return false;
-      }
-      
-      if (!allowedTypes.includes(file.type)) {
-        toast.error(`${file.name}: 지원하지 않는 파일 형식입니다.`);
-        return false;
-      }
-      
-      return true;
-    });
-
-    setFormData(prev => ({
-      ...prev,
-      attachments: [...(prev.attachments || []), ...validFiles]
-    }));
-  };
-
-  const removeFile = (index: number) => {
-    setFormData(prev => ({
-      ...prev,
-      attachments: prev.attachments?.filter((_, i) => i !== index)
-    }));
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    handleFileSelect(e.dataTransfer.files);
-  };
-
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-  };
+  const isLoading = createMutation.isPending || updateMutation.isPending;
 
   return (
     <FormContainer>
@@ -514,10 +445,10 @@ const handleSubmit = (e: React.FormEvent) => {
             />
             
             <Input
-              label="예산 코드"
+              label="링크"
               value={formData.budgetCode}
               onChange={(e) => handleChange('budgetCode', e.target.value)}
-              placeholder="예산 코드 (선택사항)"
+              placeholder="링크 (선택사항)"
             />
           </FormGrid>
         </FormSection>
@@ -574,58 +505,6 @@ const handleSubmit = (e: React.FormEvent) => {
           </FormRow>
         </FormSection>
 
-        {/* 첨부파일 */}
-        <FormSection>
-          <div className="section-title">
-            첨부파일 (선택사항)
-          </div>
-          
-          <FileUploadArea
-            isDragOver={dragOver}
-            onDrop={handleDrop}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setDragOver(true);
-            }}
-            onDragLeave={() => setDragOver(false)}
-            onClick={() => {
-              const input = document.createElement('input');
-              input.type = 'file';
-              input.multiple = true;
-              input.accept = '.pdf,.doc,.docx,.jpg,.jpeg,.png';
-              input.onchange = (e) => handleFileSelect((e.target as HTMLInputElement).files);
-              input.click();
-            }}
-          >
-            <div className="upload-text">
-              파일을 여기에 끌어다 놓거나 클릭하여 선택하세요
-            </div>
-            <div className="upload-hint">
-              PDF, Word, 이미지 파일 (최대 10MB)
-            </div>
-          </FileUploadArea>
-          
-          {formData.attachments && formData.attachments.length > 0 && (
-            <FileList>
-              {formData.attachments.map((file, index) => (
-                <div key={index} className="file-item">
-                  <div className="file-info">
-                    <span className="file-name">{file.name}</span>
-                    <span className="file-size">({formatFileSize(file.size)})</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="remove-btn"
-                    onClick={() => removeFile(index)}
-                  >
-                    ✕
-                  </button>
-                </div>
-              ))}
-            </FileList>
-          )}
-        </FormSection>
-
         {/* 버튼 그룹 */}
         <ButtonGroup>
           <Button type="button" variant="outline" onClick={onCancel}>
@@ -633,8 +512,8 @@ const handleSubmit = (e: React.FormEvent) => {
           </Button>
           <Button 
             type="submit" 
-            loading={createMutation.isPending}
-            disabled={createMutation.isPending}
+            loading={isLoading}
+            disabled={isLoading}
           >
             {isEdit ? '수정' : '등록'}
           </Button>

@@ -355,7 +355,7 @@ const requiredColumns = [
   { name: '긴급도', required: false, description: '낮음/보통/높음/긴급' },
   { name: '희망납기일', required: false, description: 'YYYY-MM-DD 형식' },
   { name: '프로젝트명', required: false, description: '관련 프로젝트' },
-  { name: '예산코드', required: false, description: '예산 코드' },
+  { name: '링크', required: false, description: '링크' },
 ];
 
 const ExcelBulkUpload: React.FC<ExcelBulkUploadProps> = ({

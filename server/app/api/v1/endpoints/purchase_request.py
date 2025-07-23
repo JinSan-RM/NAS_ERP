@@ -78,6 +78,21 @@ def create_purchase_request(
     새 구매 요청 생성
     """
     try:
+        # request_number 자동 생성 추가
+        if not hasattr(request_in, 'request_number') or not request_in.request_number:
+            from datetime import datetime
+            now = datetime.now()
+            # PR + 년월 + 마이크로초 형태로 고유번호 생성
+            request_number = f"PR{now.strftime('%Y%m')}{now.microsecond:06d}"
+            
+            # request_in에 request_number 추가
+            request_data = request_in.dict()
+            request_data['request_number'] = request_number
+            
+            # 새로운 PurchaseRequestCreate 객체 생성
+            from app.schemas.purchase_request import PurchaseRequestCreate
+            request_in = PurchaseRequestCreate(**request_data)
+        
         purchase_request = crud.purchase_request.create(db=db, obj_in=request_in)
         return purchase_request
     except Exception as e:
@@ -266,7 +281,7 @@ def bulk_upload_purchase_requests(
                     specifications=str(row.get('사양', '')).strip() if pd.notna(row.get('사양')) else None,
                     quantity=int(row['수량']) if pd.notna(row['수량']) else 1,
                     unit=str(row.get('단위', '개')).strip() if pd.notna(row.get('단위')) else '개',
-                    estimated_price=float(row['예상단가']) if pd.notna(row.get('예상단가')) else None,
+                    estimated_unit_price=float(row['예상단가']) if pd.notna(row.get('예상단가')) else None,
                     preferred_supplier=str(row.get('공급업체', '')).strip() if pd.notna(row.get('공급업체')) else None,
                     category=str(row.get('카테고리', '')).strip() if pd.notna(row.get('카테고리')) else None,
                     urgency=UrgencyLevel(row.get('긴급도', 'normal')) if pd.notna(row.get('긴급도')) else UrgencyLevel.NORMAL,
@@ -339,7 +354,7 @@ def export_purchase_requests_excel(
             '사양': req.specifications or '',
             '수량': req.quantity,
             '단위': req.unit,
-            '예상단가': req.estimated_price or 0,
+            '예상단가': req.estimated_unit_price or 0,
             '총예산': req.total_budget or 0,
             '공급업체': req.preferred_supplier or '',
             '카테고리': req.category or '',

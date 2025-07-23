@@ -229,7 +229,7 @@ export const purchaseApi = {
       const response = await apiRequest.put(`/purchase-requests/${id}`, data);
       return response;
     } catch (error) {
-      console.error('구매 요청 수정 실패:', error);
+      console.error('API 오류 상세:', error.response?.data); // 이 부분 추가
       throw error;
     }
   },

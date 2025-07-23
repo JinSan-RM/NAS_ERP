@@ -22,6 +22,22 @@ from .purchase_request import (
     PurchaseRequestApproval
 )
 
+from .unified_inventory import (
+    UnifiedInventoryCreate,
+    UnifiedInventoryUpdate,
+    UnifiedInventoryInDB,
+    UnifiedInventoryList,
+    UnifiedInventoryStats,
+    UnifiedInventoryBase,
+    ReceiptHistoryCreate,
+    ReceiptHistoryInDB,
+    ReceiptHistoryBase,
+    ReceiptBase,
+    ReceiptCreate,
+    ReceiptInDB
+)
+
+
 __all__ = [
     # 재고 관리
     "Inventory",
@@ -41,5 +57,18 @@ __all__ = [
     "PurchaseRequestStats",
     "PurchaseRequestBase",
     "PurchaseRequestFilter",
-    "PurchaseRequestApproval"
+    "PurchaseRequestApproval",
+
+    "UnifiedInventoryCreate",
+    "UnifiedInventoryUpdate",
+    "UnifiedInventoryInDB",
+    "UnifiedInventoryList",
+    "UnifiedInventoryStats",
+    "UnifiedInventoryBase",
+    "ReceiptHistoryCreate",
+    "ReceiptHistoryInDB",
+    "ReceiptHistoryBase",
+    "ReceiptCreate",
+    "ReceiptInDB",
+    "ReceiptBase"
 ]
