@@ -3,7 +3,7 @@ import React, { useState, useMemo } from 'react';
 import styled from 'styled-components';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { Plus, Download, Filter, RefreshCw, Edit, Trash2 } from 'lucide-react';
+import { Plus, Download, Filter, RefreshCw, Edit, Trash2, Package } from 'lucide-react';
 
 // Components
 import Table from '../common/Table';
@@ -13,6 +13,8 @@ import Pagination from '../common/Pagination';
 import LoadingSpinner from '../common/LoadingSpinner';
 import Modal from '../common/Modal';
 import InventoryFilters from './InventoryFilters';
+import InventoryForm from './InventoryForm';
+import ReceiptModal from './ReceiptModal'; // 새로 만들 컴포넌트
 
 // Services
 import api from '../../services/api';
@@ -26,7 +28,9 @@ interface InventoryItem {
   item_name: string;
   category?: string;
   brand?: string;
-  current_stock: number;
+  current_quantity: number;
+  total_received: number;
+  reserved_quantity: number;
   minimum_stock: number;
   maximum_stock?: number;
   unit_price?: number;
@@ -37,8 +41,25 @@ interface InventoryItem {
   warehouse?: string;
   is_active: boolean;
   description?: string;
+  receipt_history?: ReceiptHistory[];
+  condition_quantities?: { [key: string]: number };
+  last_received_date?: string;
+  last_received_by?: string;
+  stock_status: 'normal' | 'low_stock' | 'out_of_stock' | 'overstocked';
   created_at: string;
   updated_at?: string;
+}
+
+interface ReceiptHistory {
+  receipt_number: string;
+  item_name: string;
+  expected_quantity: number;
+  received_quantity: number;
+  receiver_name: string;
+  department: string;
+  received_date: string;
+  condition?: string;
+  notes?: string;
 }
 
 const Container = styled.div`
@@ -136,23 +157,41 @@ const StockIndicator = styled.div<{ stockLevel: 'high' | 'medium' | 'low' | 'out
   }
 `;
 
+const QuantityInfo = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  
+  .main-quantity {
+    font-weight: bold;
+    font-size: 0.95rem;
+  }
+  
+  .sub-info {
+    font-size: 0.8rem;
+    color: #666;
+  }
+`;
+
 const InventoryPage: React.FC = () => {
   const queryClient = useQueryClient();
   
   // State
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState<SearchFilters>({});
-  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
 
-  // 재고 목록 조회
+  // 재고 목록 조회 (unified_inventory API 사용)
   const { 
     data: inventoryData, 
     isLoading, 
     error,
     refetch 
   } = useQuery({
-    queryKey: ['inventory', currentPage, filters],
+    queryKey: ['unified-inventory', currentPage, filters],
     queryFn: () => api.inventory.getItems(currentPage, 20, filters),
     keepPreviousData: true,
     staleTime: 5 * 60 * 1000,
@@ -161,17 +200,46 @@ const InventoryPage: React.FC = () => {
 
   // 재고 통계 조회
   const { data: statsData } = useQuery({
-    queryKey: ['inventory-stats'],
+    queryKey: ['unified-inventory-stats'],
     queryFn: () => api.inventory.getStats(),
     staleTime: 5 * 60 * 1000,
+  });
+
+  // 품목 생성 Mutation
+  const createItemMutation = useMutation({
+    mutationFn: api.inventory.createItem,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
+      toast.success('품목이 등록되었습니다.');
+      handleFormModalClose();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '품목 등록 중 오류가 발생했습니다.');
+    },
+  });
+
+  // 품목 수정 Mutation
+  const updateItemMutation = useMutation({
+    mutationFn: ({ id, data }: { id: number; data: any }) => 
+      api.inventory.updateItem(id, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
+      toast.success('품목이 수정되었습니다.');
+      handleFormModalClose();
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '품목 수정 중 오류가 발생했습니다.');
+    },
   });
 
   // 삭제 Mutation
   const deleteItemMutation = useMutation({
     mutationFn: api.inventory.deleteItem,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
       toast.success('품목이 삭제되었습니다.');
     },
     onError: (error: any) => {
@@ -179,9 +247,25 @@ const InventoryPage: React.FC = () => {
     },
   });
 
+  // 수령 추가 Mutation
+  const addReceiptMutation = useMutation({
+    mutationFn: ({ itemId, receiptData }: { itemId: number; receiptData: any }) =>
+      api.inventory.addReceipt(itemId, receiptData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
+      toast.success('수령 내역이 추가되었습니다.');
+      setIsReceiptModalOpen(false);
+      setSelectedItem(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '수령 추가 중 오류가 발생했습니다.');
+    },
+  });
+
   // Excel 내보내기 Mutation
   const exportMutation = useMutation({
-    mutationFn: () => api.inventory.exportData('inventory'),
+    mutationFn: () => api.inventory.exportData(),
     onSuccess: (blob: Blob) => {
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -200,10 +284,26 @@ const InventoryPage: React.FC = () => {
 
   // 재고 수준 계산
   const getStockLevel = (current: number, minimum: number): 'high' | 'medium' | 'low' | 'out' => {
-    if (current === 0) return 'out';
-    if (current <= minimum) return 'low';
-    if (current <= minimum * 2) return 'medium';
+    // 🔥 안전한 숫자 변환
+    const currentNum = Number(current) || 0;
+    const minimumNum = Number(minimum) || 0;
+    
+    if (currentNum === 0) return 'out';
+    if (minimumNum === 0) return 'high'; // 최소재고가 0이면 높음으로
+    if (currentNum <= minimumNum) return 'low';
+    if (currentNum <= minimumNum * 2) return 'medium';
     return 'high';
+  };
+
+  // 재고 상태 표시
+  const getStockStatusColor = (status: string) => {
+    switch (status) {
+      case 'normal': return '#10B981';
+      case 'low_stock': return '#F59E0B';
+      case 'out_of_stock': return '#EF4444';
+      case 'overstocked': return '#3B82F6';
+      default: return '#6B7280';
+    }
   };
 
   // 테이블 컬럼 정의
@@ -242,24 +342,40 @@ const InventoryPage: React.FC = () => {
       render: (value) => value || '-',
     },
     {
-      key: 'current_stock',
+      key: 'current_quantity',
       label: '재고 현황',
       sortable: true,
+      width: '160px',
+      render: (value, item) => (
+        <QuantityInfo>
+          <div className="main-quantity" style={{ color: getStockStatusColor(item.stock_status) }}>
+            현재: {value.toLocaleString()}
+          </div>
+          <div className="sub-info">
+            총수령: {item.total_received?.toLocaleString() || 0}
+          </div>
+          <div className="sub-info">
+            최소: {item.minimum_stock?.toLocaleString() || 0}
+          </div>
+        </QuantityInfo>
+      ),
+    },
+    {
+      key: 'condition_quantities',
+      label: '상태별 재고',
       width: '140px',
-      render: (value, item) => {
-        const stockLevel = getStockLevel(value, item.minimum_stock);
+      render: (value) => {
+        if (!value) return '-';
         return (
-          <StockIndicator stockLevel={stockLevel}>
-            <div className="stock-dot" />
-            <div className="stock-text">
-              {value.toLocaleString()}
-              {item.minimum_stock && (
-                <span style={{ fontSize: '0.8rem', color: '#666' }}>
-                  /{item.minimum_stock}
-                </span>
-              )}
-            </div>
-          </StockIndicator>
+          <div style={{ fontSize: '0.8rem' }}>
+            <div>양호: {value.good || 0}</div>
+            <div>우수: {value.excellent || 0}</div>
+            {(value.damaged > 0 || value.defective > 0) && (
+              <div style={{ color: '#EF4444' }}>
+                손상: {value.damaged || 0} / 불량: {value.defective || 0}
+              </div>
+            )}
+          </div>
         );
       },
     },
@@ -269,7 +385,12 @@ const InventoryPage: React.FC = () => {
       sortable: true,
       width: '120px',
       align: 'right',
-      render: (value, item) => value ? `${item.currency} ${value.toLocaleString()}` : '-',
+      render: (value, item) => {
+        // 🔥 null/undefined 체크 추가
+        if (!value || value === 0) return '-';
+        const currency = item.currency || 'KRW';
+        return `${currency} ${value.toLocaleString()}`;
+      },
     },
     {
       key: 'supplier_name',
@@ -288,9 +409,15 @@ const InventoryPage: React.FC = () => {
       },
     },
     {
+      key: 'last_received_date',
+      label: '최근수령일',
+      width: '110px',
+      render: (value) => value ? new Date(value).toLocaleDateString('ko-KR') : '-',
+    },
+    {
       key: 'is_active',
       label: '상태',
-      width: '100px',
+      width: '80px',
       render: (value) => (
         <StatusBadge isActive={value}>
           {value ? '활성' : '비활성'}
@@ -300,9 +427,17 @@ const InventoryPage: React.FC = () => {
     {
       key: 'actions',
       label: '관리',
-      width: '120px',
+      width: '140px',
       render: (_, item) => (
         <ActionButtonGroup>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleAddReceipt(item)}
+            title="수령 추가"
+          >
+            <Package size={14} />
+          </Button>
           <Button
             size="sm"
             variant="outline"
@@ -332,7 +467,7 @@ const InventoryPage: React.FC = () => {
 
   const handleEdit = (item: InventoryItem) => {
     setEditingItem(item);
-    setIsAddModalOpen(true);
+    setIsFormModalOpen(true);
   };
 
   const handleDelete = async (itemId: number) => {
@@ -345,23 +480,37 @@ const InventoryPage: React.FC = () => {
     exportMutation.mutate();
   };
 
-  const handleModalClose = () => {
-    setIsAddModalOpen(false);
+  const handleFormModalClose = () => {
+    setIsFormModalOpen(false);
     setEditingItem(null);
   };
 
-  const handleFormSuccess = () => {
-    handleModalClose();
-    refetch();
-    queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+  const handleFormSubmit = (formData: any) => {
+    if (editingItem) {
+      updateItemMutation.mutate({ id: editingItem.id, data: formData });
+    } else {
+      createItemMutation.mutate(formData);
+    }
+  };
+
+  const handleAddReceipt = (item: InventoryItem) => {
+    setSelectedItem(item);
+    setIsReceiptModalOpen(true);
+  };
+
+  const handleReceiptSubmit = (receiptData: any) => {
+    if (selectedItem) {
+      addReceiptMutation.mutate({ 
+        itemId: selectedItem.id, 
+        receiptData 
+      });
+    }
   };
 
   // 데이터 추출
   const items = inventoryData?.data?.items || [];
   const totalPages = inventoryData?.data?.pages || 0;
   const stats = statsData?.data || {};
-
-  console.log('Inventory data:', { inventoryData, items, stats }); // 디버깅용
 
   if (isLoading) {
     return <LoadingSpinner text="재고 데이터를 불러오는 중..." />;
@@ -393,8 +542,8 @@ const InventoryPage: React.FC = () => {
           <p>전체 품목</p>
         </StatCard>
         <StatCard color="#10B981">
-          <h3>{items.filter(item => item.current_stock > item.minimum_stock).length}</h3>
-          <p>충분한 재고</p>
+          <h3>{items.filter(item => item.stock_status === 'normal').length}</h3>
+          <p>정상 재고</p>
         </StatCard>
         <StatCard color="#F59E0B">
           <h3>{stats?.low_stock_items || 0}</h3>
@@ -429,7 +578,7 @@ const InventoryPage: React.FC = () => {
               <Download size={16} />
               Excel 다운로드
             </Button>
-            <Button onClick={() => setIsAddModalOpen(true)}>
+            <Button onClick={() => setIsFormModalOpen(true)}>
               <Plus size={16} />
               품목 추가
             </Button>
@@ -456,15 +605,32 @@ const InventoryPage: React.FC = () => {
 
       {/* 품목 추가/수정 모달 */}
       <Modal
-        isOpen={isAddModalOpen}
-        onClose={handleModalClose}
+        isOpen={isFormModalOpen}
+        onClose={handleFormModalClose}
         title={editingItem ? '품목 수정' : '새 품목 추가'}
         size="lg"
       >
-        <div style={{ padding: '20px', textAlign: 'center' }}>
-          <p>품목 폼 컴포넌트를 여기에 구현하세요.</p>
-          <Button onClick={handleModalClose}>닫기</Button>
-        </div>
+        <InventoryForm
+          item={editingItem}
+          onSubmit={handleFormSubmit}
+          onCancel={handleFormModalClose}
+          loading={createItemMutation.isPending || updateItemMutation.isPending}
+        />
+      </Modal>
+
+      {/* 수령 추가 모달 */}
+      <Modal
+        isOpen={isReceiptModalOpen}
+        onClose={() => setIsReceiptModalOpen(false)}
+        title={`수령 추가 - ${selectedItem?.item_name}`}
+        size="lg"
+      >
+        <ReceiptModal
+          item={selectedItem}
+          onSubmit={handleReceiptSubmit}
+          onCancel={() => setIsReceiptModalOpen(false)}
+          loading={addReceiptMutation.isPending}
+        />
       </Modal>
     </Container>
   );

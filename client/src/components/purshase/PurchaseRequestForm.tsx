@@ -319,6 +319,7 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
       preferred_supplier: formData.preferredSupplier,
       project: formData.project,
       budget_code: formData.budgetCode,
+      statusbar: 'SUBMITTED', // 기본 상태는 '요청됨'
     };
 
     console.log('=== 전송할 데이터 ===');

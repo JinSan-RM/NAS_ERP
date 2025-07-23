@@ -128,14 +128,9 @@ export interface ApprovalRequest {
 
 // 열거형 타입들
 export type RequestStatus = 
-  | 'draft'           // 임시저장
-  | 'submitted'       // 제출됨
-  | 'pending_approval' // 승인 대기
-  | 'approved'        // 승인됨
-  | 'rejected'        // 거절됨
-  | 'in_review'       // 검토중
-  | 'cancelled'       // 취소됨
-  | 'completed';      // 완료됨
+  | 'SUBMITTED'    // 요청됨
+  | 'COMPLETED'    // 구매완료
+  | 'CANCELLED';   // 취소됨
 
 export type UrgencyLevel = 
   | 'low'             // 낮음
@@ -162,14 +157,9 @@ export type PurchaseMethod =
 
 // 라벨 매핑
 export const STATUS_LABELS: Record<RequestStatus, string> = {
-  draft: '임시저장',
-  submitted: '제출됨',
-  pending_approval: '승인 대기',
-  approved: '승인됨',
-  rejected: '거절됨',
-  in_review: '검토중',
-  cancelled: '취소됨',
-  completed: '완료됨',
+  SUBMITTED: '요청됨',
+  COMPLETED: '구매완료', 
+  CANCELLED: '취소됨',
 };
 
 export const URGENCY_LABELS: Record<UrgencyLevel, string> = {

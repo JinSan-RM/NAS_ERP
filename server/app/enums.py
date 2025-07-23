@@ -1,11 +1,7 @@
 from enum import Enum
 
 class RequestStatus(str, Enum):
-    DRAFT = "DRAFT"
     SUBMITTED = "SUBMITTED"
-    PENDING_APPROVAL = "PENDING_APPROVAL"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED"
     CANCELLED = "CANCELLED"
     COMPLETED = "COMPLETED"
 

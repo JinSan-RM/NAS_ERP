@@ -34,7 +34,7 @@ import { useNavigate } from 'react-router-dom';
 import { Package2, CheckCircle2 } from 'lucide-react';
 
 // Services
-import { purchaseApi, SearchFilters } from '../../services/api';
+import { purchaseApi, inventoryApi, SearchFilters } from '../../services/api';
 
 // Types
 interface PurchaseRequest {
@@ -401,6 +401,112 @@ const EmptyState = styled.div`
     line-height: 1.6;
   }
 `;
+const ConfirmDialog = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+`;
+
+const ConfirmContent = styled.div`
+  background: white;
+  padding: 32px;
+  border-radius: 16px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+  max-width: 500px;
+  width: 90%;
+  text-align: center;
+  
+  .confirm-icon {
+    width: 64px;
+    height: 64px;
+    background: linear-gradient(135deg, #10b981, #059669);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 20px;
+    color: white;
+  }
+  
+  .confirm-title {
+    font-size: 1.5rem;
+    font-weight: 600;
+    margin-bottom: 12px;
+    color: #1f2937;
+  }
+  
+  .confirm-message {
+    color: #6b7280;
+    margin-bottom: 8px;
+    line-height: 1.5;
+  }
+  
+  .item-info {
+    background: #f9fafb;
+    padding: 16px;
+    border-radius: 8px;
+    margin: 20px 0;
+    text-align: left;
+    
+    .info-row {
+      display: flex;
+      justify-content: between;
+      margin-bottom: 8px;
+      
+      &:last-child {
+        margin-bottom: 0;
+      }
+      
+      .label {
+        font-weight: 500;
+        color: #6b7280;
+        min-width: 80px;
+      }
+      
+      .value {
+        font-weight: 600;
+        color: #1f2937;
+        flex: 1;
+      }
+    }
+  }
+  
+  .button-group {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    margin-top: 24px;
+  }
+`;
+const shimmerAnimation = `
+  @keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+  }
+  
+  .receipt {
+    position: relative;
+    overflow: hidden;
+  }
+  
+  .receipt::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
+    animation: shimmer 2s infinite;
+  }
+`;
 
 // 메인 컴포넌트
 const PurchaseRequestPage: React.FC = () => {
@@ -415,6 +521,8 @@ const PurchaseRequestPage: React.FC = () => {
   const [editingRequest, setEditingRequest] = useState<PurchaseRequest | null>(null);
   const [viewingRequest, setViewingRequest] = useState<PurchaseRequest | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [confirmingItem, setConfirmingItem] = useState<PurchaseRequest | null>(null);
+
 
   // 구매 요청 목록 조회
   const { 
@@ -525,13 +633,9 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
       width: '120px',
       render: (value) => {
         const statusMap: Record<string, string> = {
-          'draft': '임시저장',
-          'submitted': '제출됨',
-          'pending_approval': '승인대기',
-          'approved': '승인됨',
-          'rejected': '거절됨',
-          'cancelled': '취소됨',
-          'completed': '완료됨'
+          'SUBMITTED': '요청됨',
+          'COMPLETED': '구매완료', 
+          'cancCANCELLEDelled': '취소됨'
         };
         return <StatusBadge $status={value}>{statusMap[value] || value}</StatusBadge>;
       },
@@ -564,23 +668,34 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
           </IconButton>
           
           {/* 승인된 상태일 때만 수령완료 버튼 표시 */}
-          {item.status === 'APPROVED' && (
+          {item.status === 'SUBMITTED' && (
             <IconButton 
               className="receipt"
               onClick={() => handleReceiptComplete(item)}
-              title="수령완료"
+              title="구매완료"
               style={{
                 backgroundColor: '#10b981',
                 color: 'white',
-                borderRadius: '6px'
+                borderRadius: '6px',
+                position: 'relative',
+                overflow: 'hidden'
               }}
             >
-              <Package2 size={14} />
+              <CheckCircle2 size={14} />
+              <span style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                background: 'linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.3) 50%, transparent 70%)',
+                animation: 'shimmer 2s infinite'
+              }} />
             </IconButton>
           )}
           
           {/* 편집 가능한 상태일 때만 수정 버튼 표시 */}
-          {['DRAFT', 'SUBMITTED', 'REJECTED'].includes(item.status) && (
+          {['draft', 'SUBMITTED', 'rejected'].includes(item.status) && (
             <IconButton 
               className="edit"
               onClick={() => handleEdit(item)}
@@ -591,7 +706,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
           )}
           
           {/* 삭제 가능한 상태일 때만 삭제 버튼 표시 */}
-          {item.status !== 'COMPLETED' && (
+          {item.status !== 'completed' && (
             <IconButton 
               className="delete"
               onClick={() => handleDelete(item.id)}
@@ -655,44 +770,97 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
   };
 
   // 3. 🔥 수령완료 처리 함수 추가
-  const handleReceiptComplete = async (request: any) => {
-    try {
-      // 수령 데이터 생성
-      const receiptData = {
-        purchaseRequestId: request.id,
-        itemName: request.item_name,
-        expectedQuantity: request.quantity,
-        receivedQuantity: request.quantity, // 기본값으로 요청수량과 동일
-        receiverName: '현재사용자', // 실제로는 로그인 사용자
-        department: request.department,
-        receivedDate: new Date().toISOString(),
-        condition: 'excellent', // 기본 상태
-        notes: `구매요청 #${request.id}에서 자동 생성됨`
-      };
+  const handleReceiptComplete = (request: PurchaseRequest) => {
+    setConfirmingItem(request);
+  };
 
-      // 수령 기록 생성 (receiptApi 사용)
-      await receiptApi.createReceipt(receiptData);
-      
-      // 구매 요청 상태를 '완료'로 업데이트
-      await purchaseApi.updateRequest(request.id, { 
-        status: 'COMPLETED' 
+  // 4. 실제 수령완료 처리 함수
+  const confirmReceiptComplete = async () => {
+  if (!confirmingItem) return;
+  
+  try {
+    // 1. 🔥 구매 요청 데이터를 품목관리용 데이터로 변환
+    const inventoryData = {
+      item_code: `ITM-${Date.now()}`,
+      item_name: confirmingItem.item_name || '품목명 없음',
+      category: confirmingItem.category || 'OTHER',
+      description: confirmingItem.specifications || '',
+      current_stock: Number(confirmingItem.quantity) || 0,
+      minimum_stock: Math.max(1, Math.ceil((Number(confirmingItem.quantity) || 0) * 0.2)),
+      maximum_stock: (Number(confirmingItem.quantity) || 0) * 2,
+      unit: confirmingItem.unit || '개',
+      unit_price: Number(confirmingItem.estimated_unit_price) || 0,
+      currency: confirmingItem.currency || 'KRW',
+      supplier_name: confirmingItem.preferred_supplier || '',
+      location: '창고',
+      warehouse: '메인창고',
+      purchase_request_id: confirmingItem.id,
+      notes: `구매요청 #${confirmingItem.id}에서 자동 생성됨`,
+      is_active: true
+    };
+
+    // 2. 품목 추가 (에러가 나도 계속 진행)
+    try {
+      const inventoryResponse = await fetch('http://localhost:8000/api/v1/inventory/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(inventoryData)
       });
 
-      toast.success('수령이 완료되었습니다! 수령 관리 페이지로 이동합니다.');
-      
-      // 데이터 새로고침
+      if (inventoryResponse.ok) {
+        const inventoryResult = await inventoryResponse.json();
+        console.log('품목 추가 성공:', inventoryResult);
+        toast.success('품목이 재고관리에 추가되었습니다!');
+      } else {
+        console.warn('품목 추가 실패, 상태 업데이트는 계속 진행');
+      }
+    } catch (inventoryError) {
+      console.warn('품목 추가 실패:', inventoryError);
+      toast.warning('품목 추가 중 문제가 있었지만 구매는 완료됩니다.');
+    }
+
+    // 3. 구매 요청 상태를 'COMPLETED'로 업데이트
+    await purchaseApi.updateRequest(confirmingItem.id, { 
+      status: 'COMPLETED',
+      completed_date: new Date().toISOString(),
+      completed_by: '현재사용자' // 실제로는 로그인한 사용자 정보
+    });
+
+    toast.success('🎉 구매가 완료되어 품목관리에 등록되었습니다!');
+    
+    // 4. 쿼리 새로고침 (에러 방지)
+    try {
       queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      
-      // 1초 후 수령 관리 페이지로 이동
-      setTimeout(() => {
-        navigate('/receipts');
-      }, 1000);
-      
-    } catch (error: any) {
-      console.error('수령완료 처리 실패:', error);
-      toast.error(error.response?.data?.message || '수령완료 처리 중 오류가 발생했습니다.');
+      queryClient.invalidateQueries({ queryKey: ['inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+    } catch (queryError) {
+      console.warn('쿼리 새로고침 실패:', queryError);
     }
+    setConfirmingItem(null);
+    
+    // 5. 1.5초 후 품목관리 페이지로 이동
+    // 5. 안전한 페이지 이동
+    try {
+      setTimeout(() => {
+        navigate('/inventory');
+      }, 1000); // 시간을 줄여서 더 빠르게
+    } catch (navigationError) {
+      console.error('페이지 이동 실패:', navigationError);
+      // 수동으로 이동
+      window.location.href = '/inventory';
+    }
+    
+  } catch (error: any) {
+    console.error('구매완료 처리 실패:', error);
+    toast.error(error.response?.data?.message || '구매완료 처리 중 오류가 발생했습니다.');
+  }
+};
+  // 5. 확인 다이얼로그 닫기
+  const cancelReceiptComplete = () => {
+    setConfirmingItem(null);
   };
 
   // 데이터 추출
@@ -920,6 +1088,71 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             setViewingRequest(null);
           }}
         />
+      )}
+      {/* 구매완료 확인 다이얼로그 */}
+      {confirmingItem && (
+        <ConfirmDialog onClick={cancelReceiptComplete}>
+          <ConfirmContent onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon">
+              <CheckCircle2 size={32} />
+            </div>
+            
+            <div className="confirm-title">구매완료 처리</div>
+            
+            <div className="confirm-message">
+              아래 구매 요청을 완료 처리하시겠습니까?
+            </div>
+            <div className="confirm-message">
+              완료 후 품목관리 페이지로 이동합니다.
+            </div>
+            
+            <div className="item-info">
+              <div className="info-row">
+                <span className="label">품목명:</span>
+                <span className="value">{confirmingItem.item_name}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">수량:</span>
+                <span className="value">{confirmingItem.quantity} {confirmingItem.unit || '개'}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">요청자:</span>
+                <span className="value">{confirmingItem.requester_name}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">부서:</span>
+                <span className="value">{confirmingItem.department}</span>
+              </div>
+              {confirmingItem.total_budget && (
+                <div className="info-row">
+                  <span className="label">예산:</span>
+                  <span className="value">{confirmingItem.total_budget.toLocaleString()}원</span>
+                </div>
+              )}
+            </div>
+            
+            <div className="button-group">
+              <Button 
+                variant="outline" 
+                onClick={cancelReceiptComplete}
+                size="lg"
+              >
+                취소
+              </Button>
+              <Button 
+                onClick={confirmReceiptComplete}
+                size="lg"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none'
+                }}
+              >
+                <CheckCircle2 size={18} />
+                구매완료
+              </Button>
+            </div>
+          </ConfirmContent>
+        </ConfirmDialog>
       )}
     </Container>
     

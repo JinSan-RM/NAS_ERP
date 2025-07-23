@@ -48,7 +48,7 @@ class PurchaseRequest(Base):
     required_by_date = Column(DateTime(timezone=True))
     
     # 승인 관련
-    status = Column(Enum(RequestStatus), nullable=False, default=RequestStatus.DRAFT)
+    status = Column(Enum(RequestStatus), nullable=False, default=RequestStatus.SUBMITTED)
     approval_level = Column(Integer, default=1)
     current_approver = Column(String(100))
     approved_date = Column(DateTime(timezone=True))

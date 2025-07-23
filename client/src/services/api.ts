@@ -101,23 +101,40 @@ export interface PurchaseRequest {
   actual_approval_time?: number;
 }
 
+// export interface SearchFilters {
+//   search?: string;
+//   status?: string;
+//   category?: string;
+//   department?: string;
+//   supplier?: string;
+//   urgency?: string;
+//   dateFrom?: string;
+//   dateTo?: string;
+//   is_active?: boolean;
+//   min_budget?: number;
+//   max_budget?: number;
+//   requester_name?: string;
+//   project?: string;
+//   budget_code?: string;
+// }
 export interface SearchFilters {
   search?: string;
-  status?: string;
   category?: string;
-  department?: string;
-  supplier?: string;
-  urgency?: string;
-  dateFrom?: string;
-  dateTo?: string;
+  brand?: string;
+  supplier_name?: string;
+  location?: string;
+  warehouse?: string;
+  stock_status?: string;
+  is_consumable?: boolean;
+  requires_approval?: boolean;
   is_active?: boolean;
-  min_budget?: number;
-  max_budget?: number;
-  requester_name?: string;
-  project?: string;
-  budget_code?: string;
+  last_received_from?: string;
+  last_received_to?: string;
+  min_quantity?: number;
+  max_quantity?: number;
+  has_images?: boolean;
+  tags?: string[];
 }
-
 export interface PurchaseRequestFormData {
   item_name: string;
   specifications?: string;
@@ -167,6 +184,108 @@ export interface UploadResult {
   }>;
   message?: string;
 }
+
+// Unified Inventory 타입 정의
+export interface UnifiedInventoryItem {
+  id: number;
+  item_code: string;
+  item_name: string;
+  category?: string;
+  brand?: string;
+  specifications?: string;
+  total_received: number;
+  current_quantity: number;
+  reserved_quantity: number;
+  unit: string;
+  condition_quantities: { [key: string]: number };
+  unit_price?: number;
+  currency: string;
+  total_value?: number;
+  location?: string;
+  warehouse?: string;
+  storage_section?: string;
+  supplier_name?: string;
+  supplier_contact?: string;
+  minimum_stock: number;
+  maximum_stock?: number;
+  reorder_point?: number;
+  receipt_history: ReceiptHistory[];
+  last_received_date?: string;
+  last_received_by?: string;
+  last_received_department?: string;
+  last_used_date?: string;
+  main_image_url?: string;
+  image_urls: string[];
+  is_active: boolean;
+  is_consumable: boolean;
+  requires_approval: boolean;
+  description?: string;
+  notes?: string;
+  tags: string[];
+  available_quantity: number;
+  utilization_rate: number;
+  is_low_stock: boolean;
+  stock_status: 'normal' | 'low_stock' | 'out_of_stock' | 'overstocked';
+  created_at: string;
+  updated_at?: string;
+  created_by?: string;
+  updated_by?: string;
+}
+
+export interface ReceiptHistory {
+  receipt_number: string;
+  item_name: string;
+  expected_quantity: number;
+  received_quantity: number;
+  receiver_name: string;
+  receiver_email?: string;
+  department: string;
+  received_date: string;
+  location?: string;
+  condition?: string;
+  notes?: string;
+}
+
+export interface UnifiedInventoryFormData {
+  item_code: string;
+  item_name: string;
+  category?: string;
+  brand?: string;
+  specifications?: string;
+  unit: string;
+  unit_price?: number;
+  currency: string;
+  location?: string;
+  warehouse?: string;
+  storage_section?: string;
+  supplier_name?: string;
+  supplier_contact?: string;
+  minimum_stock: number;
+  maximum_stock?: number;
+  reorder_point?: number;
+  is_consumable: boolean;
+  requires_approval: boolean;
+  description?: string;
+  notes?: string;
+  tags: string[];
+}
+
+export interface UnifiedInventoryStats {
+  total_items: number;
+  total_categories: number;
+  low_stock_items: number;
+  out_of_stock_items: number;
+  overstocked_items: number;
+  total_value: number;
+  average_utilization: number;
+  status_distribution: { [key: string]: number };
+  category_distribution: Array<{ category: string; count: number; percentage: number }>;
+  recent_receipts: number;
+  recent_usage: number;
+  pending_approvals: number;
+}
+
+
 
 // 구매 요청 API - 실제 백엔드 연결
 export const purchaseApi = {
@@ -376,8 +495,34 @@ export const purchaseApi = {
   },
 };
 
-// 재고 API - 실제 백엔드 연결
+// Unified Inventory API - 새로운 통합 재고 관리
 export const inventoryApi = {
+  // // 품목 목록 조회
+  // getItems: async (page = 1, limit = 20, filters: SearchFilters = {}): Promise<{
+  //   data: {
+  //     items: UnifiedInventoryItem[];
+  //     total: number;
+  //     pages: number;
+  //     page: number;
+  //     size: number;
+  //   };
+  // }> => {
+  //   try {
+  //     const params = {
+  //       skip: (page - 1) * limit,
+  //       limit,
+  //       ...Object.fromEntries(
+  //         Object.entries(filters).filter(([_, value]) => value !== undefined && value !== '')
+  //       )
+  //     };
+      
+  //     const response = await apiRequest.get('/inventory', params); // unified_inventory 엔드포인트
+  //     return { data: response };
+  //   } catch (error) {
+  //     console.error('품목 조회 실패:', error);
+  //     throw error;
+  //   }
+  // },
   getItems: async (page = 1, limit = 20, filters: any = {}): Promise<any> => {
     try {
       const params = {
@@ -393,22 +538,34 @@ export const inventoryApi = {
     }
   },
 
+  // 🔥 stats API 경로 수정
   getStats: async (): Promise<any> => {
     try {
+      // /stats 대신 /inventory/stats 사용
       const response = await apiRequest.get('/inventory/stats');
       return { data: response };
     } catch (error) {
       console.error('재고 통계 조회 실패:', error);
-      throw error;
+      
+      // 🔥 404 오류 시 기본값 반환
+      return { 
+        data: {
+          total_items: 0,
+          low_stock_items: 0,
+          out_of_stock_items: 0,
+          total_value: 0
+        }
+      };
     }
   },
 
-  createItem: async (data: any): Promise<any> => {
+  // 품목 생성
+  createItem: async (data: UnifiedInventoryFormData): Promise<UnifiedInventoryItem> => {
     try {
-      const response = await apiRequest.post('/inventory/', data);
+      const response = await apiRequest.post('/inventory', data);
       return response;
     } catch (error) {
-      console.error('재고 생성 실패:', error);
+      console.error('품목 생성 실패:', error);
       throw error;
     }
   },
@@ -450,22 +607,314 @@ export const inventoryApi = {
       console.error('재고 내보내기 실패:', error);
       throw error;
     }
-  }
-};
+  },
 
-export const receiptApi = {
-  getReceipts: async (page = 1, limit = 20, filters: any = {}): Promise<any> => {
+  // 품목 상세 조회
+  getItem: async (itemId: number): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.get(`/inventory/${itemId}`);
+      return response;
+    } catch (error) {
+      console.error('품목 상세 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // 품목 코드로 조회
+  getItemByCode: async (itemCode: string): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.get(`/inventory/code/${itemCode}`);
+      return response;
+    } catch (error) {
+      console.error('품목 코드 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // 수령 추가
+  addReceipt: async (itemId: number, receiptData: ReceiptHistory): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.post(`/inventory/${itemId}/receipts`, receiptData);
+      return response;
+    } catch (error) {
+      console.error('수령 추가 실패:', error);
+      throw error;
+    }
+  },
+
+  // 수령 수정
+  updateReceipt: async (itemId: number, receiptNumber: string, receiptData: Partial<ReceiptHistory>): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.put(`/inventory/${itemId}/receipts/${receiptNumber}`, receiptData);
+      return response;
+    } catch (error) {
+      console.error('수령 수정 실패:', error);
+      throw error;
+    }
+  },
+
+  // 수령 삭제
+  deleteReceipt: async (itemId: number, receiptNumber: string): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.delete(`/inventory/${itemId}/receipts/${receiptNumber}`);
+      return response;
+    } catch (error) {
+      console.error('수령 삭제 실패:', error);
+      throw error;
+    }
+  },
+
+  // 재고 수량 업데이트
+  updateStock: async (itemId: number, quantity: number): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.patch(`/inventory/${itemId}/stock?quantity=${quantity}`);
+      return response;
+    } catch (error) {
+      console.error('재고 수량 업데이트 실패:', error);
+      throw error;
+    }
+  },
+
+  // 카테고리 목록 조회
+  getCategories: async (): Promise<string[]> => {
+    try {
+      const response = await apiRequest.get('/inventory/categories');
+      return response;
+    } catch (error) {
+      console.error('카테고리 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // 재고 부족 품목 조회
+  getLowStockItems: async (skip = 0, limit = 100): Promise<UnifiedInventoryItem[]> => {
+    try {
+      const response = await apiRequest.get('/inventory/low-stock', { skip, limit });
+      return response;
+    } catch (error) {
+      console.error('재고 부족 품목 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // 재고 없는 품목 조회
+  getOutOfStockItems: async (skip = 0, limit = 100): Promise<UnifiedInventoryItem[]> => {
+    try {
+      const response = await apiRequest.get('/inventory/out-of-stock', { skip, limit });
+      return response;
+    } catch (error) {
+      console.error('재고 없는 품목 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // // Excel 내보내기
+  // exportData: async (): Promise<Blob> => {
+  //   try {
+  //     const blob = await apiRequest.download('/inventory/export');
+  //     return blob;
+  //   } catch (error) {
+  //     console.error('Excel 내보내기 실패:', error);
+  //     throw error;
+  //   }
+  // },
+
+  // Excel 일괄 업로드
+  uploadExcel: async (file: File): Promise<{
+    success: boolean;
+    created_count: number;
+    updated_count?: number;
+    errors?: Array<{ row: number; field: string; message: string }>;
+    message: string;
+  }> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await api.post('/inventory/bulk-upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 120000,
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('Excel 업로드 실패:', error);
+      throw error;
+    }
+  },
+
+  // 템플릿 다운로드
+  downloadTemplate: async (): Promise<void> => {
+    try {
+      const blob = await apiRequest.download('/inventory/template/download');
+      
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'unified_inventory_template.xlsx';
+      
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('템플릿 다운로드 실패:', error);
+      throw error;
+    }
+  },
+
+  // 이미지 업로드
+  uploadImage: async (itemId: number, file: File, imageType = 'general'): Promise<{
+    success: boolean;
+    image_id: number;
+    filename: string;
+    file_url: string;
+    thumbnail_url?: string;
+    message: string;
+  }> => {
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('image_type', imageType);
+      
+      const response = await api.post(`/inventory/${itemId}/images`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      return response.data;
+    } catch (error) {
+      console.error('이미지 업로드 실패:', error);
+      throw error;
+    }
+  },
+
+  // 이미지 삭제
+  deleteImage: async (itemId: number, imageId: number): Promise<{ message: string }> => {
+    try {
+      const response = await apiRequest.delete(`/inventory/${itemId}/images/${imageId}`);
+      return response;
+    } catch (error) {
+      console.error('이미지 삭제 실패:', error);
+      throw error;
+    }
+  },
+
+  // 품목 이동/전송
+  transferItem: async (fromItemId: number, transferData: {
+    to_location: string;
+    quantity: number;
+    transfer_type: string;
+    transfer_by: string;
+    department: string;
+    reason: string;
+    notes?: string;
+    to_department?: string;
+    to_receiver?: string;
+  }): Promise<UnifiedInventoryItem> => {
+    try {
+      const response = await apiRequest.post(`/inventory/${fromItemId}/transfer`, transferData);
+      return response;
+    } catch (error) {
+      console.error('품목 이동 실패:', error);
+      throw error;
+    }
+  },
+
+  // 사용 이력 조회
+  getUsageLogs: async (itemId: number, page = 1, limit = 20): Promise<{
+    data: {
+      items: any[];
+      total: number;
+      pages: number;
+      page: number;
+      size: number;
+    };
+  }> => {
     try {
       const params = {
         skip: (page - 1) * limit,
         limit,
-        ...filters
       };
-      return await apiRequest.get('/receipts/', params);
+
+      const response = await apiRequest.get(`/inventory/${itemId}/usage-logs`, params);
+      return { data: response };
     } catch (error) {
-      console.warn('⚠️ 수령 관리 API가 구현되지 않았습니다. 샘플 데이터를 반환합니다.');
-      
-      // 샘플 수령 데이터
+      console.error('사용 이력 조회 실패:', error);
+      throw error;
+    }
+  },
+
+  // 사용 이력 추가
+  addUsageLog: async (itemId: number, usageData: {
+    usage_type: string;
+    quantity: number;
+    user_name: string;
+    department: string;
+    purpose?: string;
+    notes?: string;
+  }): Promise<any> => {
+    try {
+      const response = await apiRequest.post(`/inventory/${itemId}/usage-logs`, usageData);
+      return response;
+    } catch (error) {
+      console.error('사용 이력 추가 실패:', error);
+      throw error;
+    }
+  },
+
+  // QR 코드 생성
+  generateQRCode: async (itemId: number, options: {
+    include_info: string[];
+    size: string;
+  }): Promise<{
+    qr_code_url: string;
+    qr_code_data: string;
+    expiry_date?: string;
+  }> => {
+    try {
+      const response = await apiRequest.post(`/inventory/${itemId}/qr-code`, options);
+      return response;
+    } catch (error) {
+      console.error('QR 코드 생성 실패:', error);
+      throw error;
+    }
+  },
+
+  // 대시보드 데이터 조회
+  getDashboardData: async (): Promise<{
+    total_items: number;
+    total_value: number;
+    low_stock_alerts: number;
+    recent_receipts: number;
+    category_chart: Array<{ category: string; count: number; value: number }>;
+    stock_status_chart: Array<{ status: string; count: number; percentage: number }>;
+    monthly_receipts: Array<{ month: string; count: number; quantity: number }>;
+    top_usage_items: Array<{ item_name: string; usage_count: number; total_quantity: number }>;
+    alerts: Array<{ type: string; message: string; item_id?: number; priority: string }>;
+    recommendations: string[];
+  }> => {
+    try {
+      const response = await apiRequest.get('/inventory/dashboard');
+      return response;
+    } catch (error) {
+      console.error('대시보드 데이터 조회 실패:', error);
+      throw error;
+    }
+  },
+};
+
+// 기존 수령 API는 deprecate하고 inventoryApi로 통합
+export const receiptApi = {
+  // 호환성을 위해 기존 API 유지하되, 실제로는 inventoryApi 사용을 권장
+  getReceipts: async (page = 1, limit = 20, filters: any = {}): Promise<any> => {
+    console.warn('receiptApi.getReceipts는 deprecated입니다. inventoryApi를 사용하세요.');
+    
+    try {
+      // 샘플 데이터 반환 (기존 코드와 호환성 유지)
       const sampleReceipts = [
         {
           id: 1,
@@ -498,45 +947,30 @@ export const receiptApi = {
           size: limit,
         }
       };
+    } catch (error) {
+      console.error('수령 내역 조회 실패:', error);
+      throw error;
     }
   },
 
   createReceipt: async (data: any): Promise<any> => {
-    try {
-      return await apiRequest.post('/receipts/', data);
-    } catch (error) {
-      console.warn('⚠️ 수령 등록 API가 구현되지 않았습니다.');
-      
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      return {
-        id: Math.floor(Math.random() * 1000),
-        ...data,
-        receiptNumber: `REC-${Date.now()}`,
-        receivedDate: new Date().toISOString(),
-      };
-    }
+    console.warn('receiptApi.createReceipt는 deprecated입니다. inventoryApi.addReceipt를 사용하세요.');
+    throw new Error('이 API는 더 이상 지원되지 않습니다. inventoryApi.addReceipt를 사용하세요.');
   },
 
   updateReceipt: async (id: number, data: any): Promise<any> => {
-    try {
-      return await apiRequest.put(`/receipts/${id}`, data);
-    } catch (error) {
-      console.warn('⚠️ 수령 수정 API가 구현되지 않았습니다.');
-      throw new Error('수정 기능이 아직 구현되지 않았습니다.');
-    }
+    console.warn('receiptApi.updateReceipt는 deprecated입니다. inventoryApi.updateReceipt를 사용하세요.');
+    throw new Error('이 API는 더 이상 지원되지 않                                                     습니다. inventoryApi.updateReceipt를 사용하세요.');
   },
 
   deleteReceipt: async (id: number): Promise<any> => {
-    try {
-      return await apiRequest.delete(`/receipts/${id}`);
-    } catch (error) {
-      await new Promise(resolve => setTimeout(resolve, 500));
-      return { message: '수령 내역이 삭제되었습니다.' };
-    }
+    console.warn('receiptApi.deleteReceipt는 deprecated입니다. inventoryApi.deleteReceipt를 사용하세요.');
+    throw new Error('이 API는 더 이상 지원되지 않습니다. inventoryApi.deleteReceipt를 사용하세요.');
   },
 
   exportReceipts: async (): Promise<void> => {
-    console.warn('⚠️ 수령 내역 Excel 내보내기가 구현되지 않았습니다.');
+    console.warn('receiptApi.exportReceipts는 deprecated입니다. inventoryApi.exportData를 사용하세요.');
+    throw new Error('이 API는 더 이상 지원되지 않습니다. inventoryApi.exportData를 사용하세요.');
   }
 };
 
@@ -658,8 +1092,8 @@ export const apiUtils = {
 export default {
   dashboard: dashboardApi,
   purchase: purchaseApi,
-  inventory: inventoryApi,
-  receipt: receiptApi,
+  inventory: inventoryApi, // 새로운 통합 재고 API
+  receipt: receiptApi, // deprecated
   // kakao: kakaoApi,
   upload: uploadApi,
   utils: apiUtils,

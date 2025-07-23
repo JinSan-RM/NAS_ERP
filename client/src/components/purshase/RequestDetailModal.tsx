@@ -381,13 +381,9 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
   onApprove
 }) => {
   const statusLabels: Record<string, string> = {
-    'DRAFT': '임시저장',
-    'SUBMITTED': '제출됨',
-    'PENDING_APPROVAL': '승인대기',
-    'APPROVED': '승인됨',
-    'REJECTED': '거절됨',
-    'CANCELLED': '취소됨',
-    'COMPLETED': '완료됨'
+    'SUBMITTED': '요청됨',
+    'COMPLETED': '구매완료',
+    'CANCELLED': '취소됨'
   };
 
   const urgencyLabels: Record<string, string> = {
@@ -427,7 +423,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
     return `₩${amount.toLocaleString()}`;
   };
 
-  const canEdit = ['DRAFT', 'SUBMITTED', 'REJECTED'].includes(request.status);
+  const canEdit = request.status === 'submitted';
   const canApprove = request.status === 'PENDING_APPROVAL';
 
   return (
