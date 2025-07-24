@@ -103,6 +103,46 @@ class UnifiedInventoryInDB(UnifiedInventoryBase):
     is_low_stock: bool = Field(description="재고 부족 여부")
     stock_status: str = Field(description="재고 상태")
     model_config = ConfigDict(from_attributes=True)
+    
+# InventoryUsageLogBase 클래스 정의 추가 (누락된 것 같음)
+class InventoryUsageLogBase(BaseModel):
+    """사용 로그 기본 스키마"""
+    item_id: int = Field(..., description="품목 ID")
+    usage_type: str = Field(..., max_length=50, description="사용 유형 (출고/반납/소모/폐기)")
+    quantity: int = Field(..., ge=1, description="수량")
+    used_by: str = Field(..., max_length=100, description="사용자")
+    department: str = Field(..., max_length=100, description="부서")
+    purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
+    location: Optional[str] = Field(None, max_length=100, description="사용 장소")
+    notes: Optional[str] = Field(None, description="비고")
+    used_date: datetime = Field(..., description="사용일")
+
+
+class InventoryUsageLogInDB(InventoryUsageLogBase):
+    """DB용 사용 로그 스키마"""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    is_active: bool = True
+    
+    model_config = ConfigDict(from_attributes=True)
+
+# 사용 이력 스키마
+class InventoryUsageLogInDB(InventoryUsageLogBase):
+    id: int
+    unified_inventory_id: int
+    requires_approval: bool
+    approved_by: Optional[str]
+    approved_date: Optional[datetime]
+    actual_return_date: Optional[datetime]
+    return_condition: Optional[str]
+    usage_date: datetime
+    is_active: bool
+    
+    model_config = ConfigDict(from_attributes=True)
+
+class InventoryUsageLog(InventoryUsageLogInDB):
+    pass
 
 # 이미지 관련 스키마
 class InventoryImageBase(BaseModel):
@@ -263,6 +303,21 @@ class QRCodeResponse(BaseModel):
     qr_code_url: str
     qr_code_data: str
     expiry_date: Optional[datetime] = None
+    usage_type: str = Field(..., description="사용 유형")  # 'consumption', 'return', 'transfer', 'disposal'
+    quantity: int = Field(..., ge=1, description="수량")
+    unit: str = Field(default="개", description="단위")
+    
+    user_name: str = Field(..., max_length=100, description="사용자명")
+    user_email: Optional[str] = Field(None, max_length=255, description="사용자 이메일")
+    department: str = Field(..., max_length=100, description="부서")
+    
+    purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
+    project: Optional[str] = Field(None, max_length=100, description="프로젝트")
+    from_location: Optional[str] = Field(None, max_length=200, description="출발 위치")
+    to_location: Optional[str] = Field(None, max_length=200, description="도착 위치")
+    
+    expected_return_date: Optional[datetime] = Field(None, description="예상 반납일")
+    notes: Optional[str] = Field(None, description="비고")
 
 # 고급 검색용 스키마
 class AdvancedSearchQuery(BaseModel):
@@ -276,9 +331,20 @@ class AdvancedSearchQuery(BaseModel):
     sort_by: Optional[str] = "item_name"
     sort_order: Optional[str] = "asc"
 
-# 품목 병합 요청 스키마
-class InventoryMergeRequest(BaseModel):
-    target_item_id: int = Field(..., description="대상 품목 ID")
-    source_item_ids: List[int] = Field(..., description="소스 품목 ID 리스트")
-    merge_receipts: bool = Field(default=True, description="수령 이력 병합 여부")
-    notes: Optional[str] = Field(None, description="병합 사유")
+class InventoryUsageLogUpdate(BaseModel):
+    usage_type: Optional[str] = Field(None, description="사용 유형")
+    quantity: Optional[int] = Field(None, ge=1, description="수량")
+    unit: Optional[str] = Field(None, max_length=20, description="단위")
+    
+    user_name: Optional[str] = Field(None, max_length=100, description="사용자명")
+    user_email: Optional[str] = Field(None, max_length=255, description="사용자 이메일")
+    department: Optional[str] = Field(None, max_length=100, description="부서")
+    
+    purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
+    project: Optional[str] = Field(None, max_length=100, description="프로젝트")
+    from_location: Optional[str] = Field(None, max_length=200, description="출발 위치")
+    to_location: Optional[str] = Field(None, max_length=200, description="도착 위치")
+    
+    expected_return_date: Optional[datetime] = Field(None, description="예상 반납일")
+    notes: Optional[str] = Field(None, description="비고")
+    

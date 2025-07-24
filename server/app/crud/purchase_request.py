@@ -49,45 +49,33 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
         *,
         db_obj: PurchaseRequest,
         obj_in: PurchaseRequestUpdate
-        ) -> PurchaseRequest:
-        """구매 요청 업데이트"""
+    ) -> PurchaseRequest:
+        """구매 요청 업데이트 - 개선된 버전"""
         try:
-            print("=== UPDATE 시작 ===")
-            print(f"db_obj.created_at: {db_obj.created_at} (type: {type(db_obj.created_at)})")
-            print(f"db_obj.updated_at: {db_obj.updated_at} (type: {type(db_obj.updated_at)})")
-            
             obj_data = obj_in.dict(exclude_unset=True)
-            print(f"업데이트할 데이터: {obj_data}")
             
             # 가격이나 수량이 변경되면 총 예산 재계산
             if 'estimated_unit_price' in obj_data or 'quantity' in obj_data:
-                print("=== 예산 재계산 시작 ===")
                 estimated_unit_price = obj_data.get('estimated_unit_price', db_obj.estimated_unit_price)
                 quantity = obj_data.get('quantity', db_obj.quantity)
                 if estimated_unit_price and quantity:
                     obj_data['total_budget'] = estimated_unit_price * quantity
-                    print(f"계산된 total_budget: {obj_data['total_budget']}")
             
-            print("=== 필드 업데이트 시작 ===")
-            # 업데이트 실행
-            for field in obj_data:
+            # updated_at 자동 설정
+            obj_data['updated_at'] = datetime.now()
+            
+            # 필드 업데이트
+            for field, value in obj_data.items():
                 if hasattr(db_obj, field):
-                    print(f"업데이트 중: {field} = {obj_data[field]}")
-                    setattr(db_obj, field, obj_data[field])
+                    setattr(db_obj, field, value)
             
-            print("=== DB 커밋 시작 ===")
             db.add(db_obj)
             db.commit()
             db.refresh(db_obj)
-            print("=== UPDATE 완료 ===")
             return db_obj
             
         except Exception as e:
-            print(f"=== UPDATE 오류 발생 ===")
-            print(f"오류 타입: {type(e)}")
-            print(f"오류 메시지: {str(e)}")
-            import traceback
-            print(f"상세 스택트레이스:\n{traceback.format_exc()}")
+            db.rollback()
             raise e
     
     def get_by_request_number(self, db: Session, *, request_number: str) -> Optional[PurchaseRequest]:
@@ -456,5 +444,55 @@ class CRUDPurchaseRequest(CRUDBase[PurchaseRequest, PurchaseRequestCreate, Purch
             )
         ).order_by(PurchaseRequest.total_budget.desc()).limit(limit).all()
 
+    def complete_purchase(
+        self,
+        db: Session,
+        *,
+        request_id: int,
+        completion_data: dict
+    ) -> Optional[PurchaseRequest]:
+        """구매 요청 완료 처리"""
+        purchase_request = self.get(db=db, id=request_id)
+        if not purchase_request:
+            return None
+            
+        if purchase_request.status != RequestStatus.APPROVED:
+            raise ValueError("승인된 구매 요청만 완료 처리할 수 있습니다.")
+        
+        # 상태 업데이트
+        purchase_request.status = RequestStatus.COMPLETED
+        purchase_request.completed_date = completion_data.get('completed_date', datetime.now())
+        purchase_request.completed_by = completion_data.get('completed_by', 'system')
+        purchase_request.completion_notes = completion_data.get('notes')
+        purchase_request.inventory_item_id = completion_data.get('inventory_item_id')
+        purchase_request.updated_at = datetime.now()
+        
+        db.add(purchase_request)
+        db.commit()
+        db.refresh(purchase_request)
+        
+        return purchase_request
+    def get_completed_requests(self, db: Session, *, skip: int = 0, limit: int = 100) -> List[PurchaseRequest]:
+        """완료된 구매 요청들 조회"""
+        return db.query(self.model).filter(
+            and_(
+                PurchaseRequest.status == RequestStatus.COMPLETED,
+                PurchaseRequest.is_active == True
+            )
+        ).order_by(PurchaseRequest.completed_date.desc()).offset(skip).limit(limit).all()
+
+    def get_active_requests_only(self, db: Session, *, skip: int = 0, limit: int = 100) -> List[PurchaseRequest]:
+        """완료되지 않은 활성 구매 요청들만 조회"""
+        return db.query(self.model).filter(
+            and_(
+                PurchaseRequest.status.in_([
+                    RequestStatus.SUBMITTED, 
+                    RequestStatus.PENDING_APPROVAL,
+                    RequestStatus.APPROVED
+                ]),
+                PurchaseRequest.is_active == True
+            )
+        ).order_by(PurchaseRequest.created_at.desc()).offset(skip).limit(limit).all()
+        
 # 인스턴스 생성
 purchase_request = CRUDPurchaseRequest(PurchaseRequest)

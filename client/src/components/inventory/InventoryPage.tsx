@@ -1,5 +1,5 @@
 // client/src/components/inventory/InventoryPage.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import styled from 'styled-components';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
@@ -176,6 +176,7 @@ const QuantityInfo = styled.div`
 const InventoryPage: React.FC = () => {
   const queryClient = useQueryClient();
   
+  
   // State
   const [currentPage, setCurrentPage] = useState(1);
   const [filters, setFilters] = useState<SearchFilters>({});
@@ -183,6 +184,8 @@ const InventoryPage: React.FC = () => {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [isReceiptWithImagesModalOpen, setIsReceiptWithImagesModalOpen] = useState(false);
+  const [selectedItemForReceipt, setSelectedItemForReceipt] = useState<InventoryItem | null>(null);
 
   // 재고 목록 조회 (unified_inventory API 사용)
   const { 
@@ -204,6 +207,50 @@ const InventoryPage: React.FC = () => {
     queryFn: () => api.inventory.getStats(),
     staleTime: 5 * 60 * 1000,
   });
+
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const highlightId = urlParams.get('highlight');
+    
+    if (highlightId) {
+      // 해당 품목을 하이라이트 표시
+      setTimeout(() => {
+        const element = document.querySelector(`[data-item-id="${highlightId}"]`);
+        if (element) {
+          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          element.classList.add('highlight-item');
+          
+          // 3초 후 하이라이트 제거
+          setTimeout(() => {
+            element.classList.remove('highlight-item');
+          }, 3000);
+        }
+      }, 500);
+      
+      // URL에서 파라미터 제거
+      window.history.replaceState({}, '', '/inventory');
+    }
+  }, []);
+
+  // 🔥 개선된 수령 추가 Mutation (이미지 포함)
+  const addReceiptWithImagesMutation = useMutation({
+    mutationFn: ({ itemId, receiptData, images }: { 
+      itemId: number; 
+      receiptData: any; 
+      images: File[] 
+    }) => inventoryApi.completeReceiptWithImages(itemId, receiptData, images),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
+      toast.success('🎉 수령이 완료되고 이미지가 업로드되었습니다!');
+      setIsReceiptWithImagesModalOpen(false);
+      setSelectedItemForReceipt(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '수령 처리 중 오류가 발생했습니다.');
+    },
+  });
+
 
   // 품목 생성 Mutation
   const createItemMutation = useMutation({
@@ -427,17 +474,35 @@ const InventoryPage: React.FC = () => {
     {
       key: 'actions',
       label: '관리',
-      width: '140px',
+      width: '180px', // 폭 늘림
       render: (_, item) => (
         <ActionButtonGroup>
+          {/* 🔥 새로운 수령완료 버튼 (이미지 포함) */}
+          <Button
+            size="sm"
+            variant="success"
+            onClick={() => handleReceiptWithImages(item)}
+            title="수령완료 (이미지 포함)"
+            style={{
+              background: 'linear-gradient(135deg, #10b981, #059669)',
+              color: 'white',
+              fontWeight: '600'
+            }}
+          >
+            <Package size={14} />
+            수령완료
+          </Button>
+          
+          {/* 기존 수령 추가 버튼 */}
           <Button
             size="sm"
             variant="outline"
             onClick={() => handleAddReceipt(item)}
-            title="수령 추가"
+            title="간단 수령 추가"
           >
             <Package size={14} />
           </Button>
+          
           <Button
             size="sm"
             variant="outline"
@@ -446,6 +511,7 @@ const InventoryPage: React.FC = () => {
           >
             <Edit size={14} />
           </Button>
+          
           <Button
             size="sm"
             variant="danger"
@@ -458,6 +524,22 @@ const InventoryPage: React.FC = () => {
       ),
     },
   ], []);
+
+  // 🔥 새로운 이벤트 핸들러들
+  const handleReceiptWithImages = (item: InventoryItem) => {
+    setSelectedItemForReceipt(item);
+    setIsReceiptWithImagesModalOpen(true);
+  };
+
+  const handleReceiptWithImagesSubmit = (receiptData: any, images: File[]) => {
+    if (selectedItemForReceipt) {
+      addReceiptWithImagesMutation.mutate({
+        itemId: selectedItemForReceipt.id,
+        receiptData,
+        images
+      });
+    }
+  };
 
   // 이벤트 핸들러
   const handleSearch = (searchFilters: SearchFilters) => {
@@ -617,6 +699,33 @@ const InventoryPage: React.FC = () => {
           loading={createItemMutation.isPending || updateItemMutation.isPending}
         />
       </Modal>
+
+      {/* 🔥 CSS 스타일 추가 (하이라이트 효과) */}
+      <style jsx>{`
+        .highlight-item {
+          background: linear-gradient(135deg, #fef3c7, #fed7aa) !important;
+          border: 2px solid #f59e0b !important;
+          border-radius: 8px !important;
+          animation: highlight-pulse 1s ease-in-out 3;
+        }
+        
+        @keyframes highlight-pulse {
+          0%, 100% { transform: scale(1); }
+          50% { transform: scale(1.02); }
+        }
+      `}</style>
+
+      {/* 🔥 새로운 수령완료 모달 (이미지 포함) */}
+      <ReceiptWithImagesModal
+        item={selectedItemForReceipt}
+        isOpen={isReceiptWithImagesModalOpen}
+        onClose={() => {
+          setIsReceiptWithImagesModalOpen(false);
+          setSelectedItemForReceipt(null);
+        }}
+        onSubmit={handleReceiptWithImagesSubmit}
+        loading={addReceiptWithImagesMutation.isPending}
+      />
 
       {/* 수령 추가 모달 */}
       <Modal

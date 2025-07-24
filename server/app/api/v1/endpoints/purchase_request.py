@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, 
 from sqlalchemy.orm import Session
 import pandas as pd
 from io import BytesIO
+from datetime import datetime
 
 from app import crud, schemas
 from app.api.deps import get_db
@@ -15,6 +16,7 @@ from app.schemas.purchase_request import (
     PurchaseRequestList,
     PurchaseRequestStats,
     PurchaseRequestFilter,
+    PurchaseRequestCompletionData
 )
 
 router = APIRouter()
@@ -468,3 +470,205 @@ def download_upload_template():
     response.headers["Content-Disposition"] = "attachment; filename=purchase_request_template.xlsx"
     
     return response
+
+# server/app/api/v1/endpoints/purchase_request.py 에 추가할 엔드포인트
+
+@router.post("/{request_id}/complete", response_model=dict)
+def complete_purchase_request(
+    *,
+    db: Session = Depends(get_db),
+    request_id: int,
+    completion_data: dict  # 완료 처리 데이터
+):
+    """
+    구매 요청 완료 처리 - 품목 자동 생성 포함
+    """
+    try:
+        # 구매 요청 조회
+        purchase_request = crud.purchase_request.get(db=db, id=request_id)
+        if not purchase_request:
+            raise HTTPException(status_code=404, detail="구매 요청을 찾을 수 없습니다.")
+        
+        if purchase_request.status != RequestStatus.SUBMITTED:
+            raise HTTPException(
+                status_code=400,
+                detail="요청됨 상태의 구매 요청만 완료 처리할 수 있습니다."
+            )
+        
+        # 트랜잭션으로 안전하게 처리
+        with db.begin():
+            # 1. 품목 생성
+            inventory_data = {
+                "item_code": f"ITM-{datetime.now().strftime('%Y%m%d')}-{request_id:04d}",
+                "item_name": purchase_request.item_name,
+                "category": purchase_request.category,
+                "specifications": purchase_request.specifications,
+                "unit": purchase_request.unit or "개",
+                "unit_price": purchase_request.estimated_unit_price,
+                "currency": purchase_request.currency or "KRW",
+                "supplier_name": purchase_request.preferred_supplier,
+                "minimum_stock": max(1, (purchase_request.quantity or 1) // 5),  # 20% 정도
+                "maximum_stock": (purchase_request.quantity or 1) * 2,
+                "location": "창고",
+                "warehouse": "메인창고",
+                "is_consumable": False,
+                "requires_approval": False,
+                "description": f"구매요청 #{purchase_request.request_number}에서 생성",
+                "notes": purchase_request.justification,
+                "tags": ["구매완료", purchase_request.department],
+                "purchase_request_id": request_id
+            }
+            
+            # UnifiedInventoryCreate 스키마로 변환
+            from app.schemas.unified_inventory import UnifiedInventoryCreate
+            inventory_create = UnifiedInventoryCreate(**inventory_data)
+            
+            # 품목 생성
+            created_inventory = crud.inventory.create(db=db, obj_in=inventory_create)
+            
+            # 수령 이력 추가
+            receipt_data = {
+                "receipt_number": f"RC-{datetime.now().strftime('%Y%m%d')}-{request_id:04d}",
+                "item_name": purchase_request.item_name,
+                "expected_quantity": purchase_request.quantity,
+                "received_quantity": completion_data.get("received_quantity", purchase_request.quantity),
+                "receiver_name": completion_data.get("receiver_name", purchase_request.requester_name),
+                "receiver_email": completion_data.get("receiver_email", purchase_request.requester_email),
+                "department": purchase_request.department,
+                "received_date": completion_data.get("received_date", datetime.now()),
+                "location": completion_data.get("location", "창고"),
+                "condition": completion_data.get("condition", "good"),
+                "notes": completion_data.get("notes", "구매 완료로 자동 생성")
+            }
+            
+            from app.schemas.unified_inventory import ReceiptHistoryCreate
+            receipt_create = ReceiptHistoryCreate(**receipt_data)
+            
+            # 수령 이력과 함께 재고 업데이트
+            updated_inventory = crud.inventory.add_receipt(
+                db=db,
+                item_id=created_inventory.id,
+                receipt_in=receipt_create
+            )
+            
+            # 2. 구매 요청 상태 업데이트
+            update_data = {
+                "status": RequestStatus.COMPLETED,
+                "completed_date": datetime.now(),
+                "completed_by": completion_data.get("completed_by", "시스템"),
+                "completion_notes": completion_data.get("notes"),
+                "inventory_item_id": created_inventory.id  # 연결된 품목 ID 저장
+            }
+            
+            completed_request = crud.purchase_request.update(
+                db=db,
+                db_obj=purchase_request,
+                obj_in=update_data
+            )
+        
+        return {
+            "success": True,
+            "message": "구매 요청이 완료되어 품목으로 등록되었습니다.",
+            "purchase_request_id": request_id,
+            "inventory_item_id": created_inventory.id,
+            "inventory_item_code": created_inventory.item_code,
+            "redirect_url": f"/inventory/{created_inventory.id}"
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"구매 완료 처리 중 오류가 발생했습니다: {str(e)}"
+        )
+# 완료 처리용 스키마 추가
+class PurchaseRequestCompletionData(BaseModel):
+    received_quantity: Optional[int] = None
+    receiver_name: Optional[str] = None
+    receiver_email: Optional[str] = None
+    received_date: Optional[datetime] = None
+    location: Optional[str] = "창고"
+    condition: Optional[str] = "good"
+    notes: Optional[str] = None
+    completed_by: Optional[str] = "시스템"
+
+@router.post("/{request_id}/complete", response_model=dict)
+def complete_purchase_request(
+    *,
+    db: Session = Depends(get_db),
+    request_id: int,
+    completion_data: PurchaseRequestCompletionData
+):
+    """
+    구매 요청 완료 처리 - 품목 자동 생성 포함
+    """
+    try:
+        # 구매 요청 조회
+        purchase_request = crud.purchase_request.get(db=db, id=request_id)
+        if not purchase_request:
+            raise HTTPException(status_code=404, detail="구매 요청을 찾을 수 없습니다.")
+        
+        if purchase_request.status != RequestStatus.APPROVED:
+            raise HTTPException(
+                status_code=400,
+                detail="승인된 구매 요청만 완료 처리할 수 있습니다."
+            )
+        
+        # 완료 데이터 준비
+        completion_dict = completion_data.dict()
+        completion_dict['completed_date'] = datetime.now()
+        
+        # 트랜잭션으로 안전하게 처리
+        try:
+            # 1. 품목 생성
+            created_inventory = crud.inventory.create_from_purchase_request(
+                db=db,
+                purchase_request=purchase_request,
+                completion_data=completion_dict
+            )
+            
+            # 2. 구매 요청 완료 처리
+            completion_dict['inventory_item_id'] = created_inventory.id
+            completed_request = crud.purchase_request.complete_purchase(
+                db=db,
+                request_id=request_id,
+                completion_data=completion_dict
+            )
+            
+            return {
+                "success": True,
+                "message": "구매 요청이 완료되어 품목으로 등록되었습니다.",
+                "purchase_request_id": request_id,
+                "inventory_item_id": created_inventory.id,
+                "inventory_item_code": created_inventory.item_code,
+                "redirect_url": f"/inventory/{created_inventory.id}"
+            }
+            
+        except Exception as e:
+            db.rollback()
+            raise HTTPException(
+                status_code=500,
+                detail=f"구매 완료 처리 중 오류가 발생했습니다: {str(e)}"
+            )
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"알 수 없는 오류가 발생했습니다: {str(e)}"
+        )
+
+# 활성 요청만 조회하는 엔드포인트 추가
+@router.get("/active", response_model=List[PurchaseRequest])
+def read_active_requests(
+    db: Session = Depends(get_db),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100)
+):
+    """
+    완료되지 않은 활성 구매 요청들만 조회
+    """
+    return crud.purchase_request.get_active_requests_only(db=db, skip=skip, limit=limit)

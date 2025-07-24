@@ -70,9 +70,40 @@ class PurchaseRequest(Base):
     # 관계 설정
     # inventory_item = relationship("UnifiedInventory", back_populates="purchase_requests")
     
+    # 🔥 새로 추가: 완료 처리 관련 필드들
+    completed_date = Column(DateTime(timezone=True), nullable=True)
+    completed_by = Column(String(100), nullable=True)
+    completion_notes = Column(Text, nullable=True)
+    inventory_item_id = Column(Integer, nullable=True)  # 연결된 품목 ID
+    
+    # 관계 설정 추가
+    # inventory_item = relationship("UnifiedInventory", back_populates="purchase_request")
+    
     def __repr__(self):
         return f"<PurchaseRequest {self.request_number}: {self.item_name}>"
 
+    @property
+    def is_editable(self):
+        """수정 가능한 상태인지 확인"""
+        return self.status in [RequestStatus.SUBMITTED, RequestStatus.SUBMITTED, RequestStatus.REJECTED]
+    
+    @property
+    def is_approvable(self):
+        """승인 가능한 상태인지 확인"""
+        return self.status == RequestStatus.SUBMITTED
+    
+    @property
+    def is_deletable(self):
+        """삭제 가능한 상태인지 확인"""
+        return self.status in [RequestStatus.SUBMITTED, RequestStatus.SUBMITTED, RequestStatus.REJECTED]
+    
+    def generate_request_number(self):
+        """요청번호 자동 생성"""
+        from datetime import datetime
+        now = datetime.now()
+        prefix = f"PR{now.strftime('%Y%m')}"
+        return f"{prefix}{self.id:06d}"
+    
     def calculate_priority_score(self):
         """우선순위 점수 계산"""
         score = 0
