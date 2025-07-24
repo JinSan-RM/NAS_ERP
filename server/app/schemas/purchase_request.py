@@ -47,7 +47,7 @@ class PurchaseRequestBase(BaseModel):
 
 # 생성용 스키마
 class PurchaseRequestCreate(PurchaseRequestBase):
-    status: Optional[RequestStatus] = Field(default=RequestStatus.DRAFT, description="상태")
+    status: Optional[RequestStatus] = Field(default=RequestStatus.SUBMITTED, description="상태")
 
 # 업데이트용 스키마
 class PurchaseRequestUpdate(BaseModel):

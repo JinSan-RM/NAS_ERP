@@ -10,7 +10,6 @@ from app.schemas.unified_inventory import (
     UnifiedInventoryUpdate, 
     ReceiptHistoryCreate,
     UnifiedInventoryFilter,
-    InventoryUsageLogCreate,
     InventoryImageCreate,
     InventoryQuantityUpdate,
     UnifiedInventoryStats
@@ -359,15 +358,18 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         db.refresh(inventory)
         return inventory
     
-    def update_quantity_with_log(
+    def update_quantity(
         self, 
         db: Session, 
         *, 
         item_id: int, 
         quantity_change: int,
-        usage_log: InventoryUsageLogCreate
+        user_name: str,
+        department: str,
+        purpose: Optional[str] = None,
+        notes: Optional[str] = None
     ) -> Optional[UnifiedInventory]:
-        """사용 이력과 함께 수량 업데이트"""
+        """사용 이력 없이 간단한 수량 업데이트"""
         inventory = self.get(db=db, id=item_id)
         if not inventory:
             return None
@@ -389,10 +391,6 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             inventory.total_value = inventory.current_quantity * inventory.unit_price
         
         inventory.updated_at = datetime.now()
-     
-        # 사용 이력 추가
-        usage_log_obj = InventoryUsageLog(**usage_log.dict())
-        db.add(usage_log_obj)
         
         db.add(inventory)
         db.commit()
@@ -400,7 +398,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         return inventory
     
     def get_inventory_stats(self, db: Session) -> UnifiedInventoryStats:
-        """재고 통계 조회"""
+        """재고 통계 조회 - LOG 관련 제거"""
         # 기본 통계
         total_items = db.query(func.count(UnifiedInventory.id)).filter(
             UnifiedInventory.is_active == True
@@ -459,7 +457,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             for stat in category_stats
         ]
         
-        # 최근 활동 통계
+        # 최근 수령 통계
         recent_date = datetime.now() - timedelta(days=7)
         recent_receipts = db.query(func.count(UnifiedInventory.id)).filter(
             and_(
@@ -468,24 +466,12 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             )
         ).scalar() or 0
         
-        recent_usage = db.query(func.count(InventoryUsageLog.id)).filter(
-            InventoryUsageLog.usage_date >= recent_date
-        ).scalar() or 0
-        
-        # 승인 대기 건수
-        pending_approvals = db.query(func.count(InventoryUsageLog.id)).filter(
-            and_(
-                InventoryUsageLog.requires_approval == True,
-                InventoryUsageLog.approved_date.is_(None)
-            )
-        ).scalar() or 0
-        
         # 평균 사용률 계산
         avg_utilization = db.query(
             func.avg(
                 func.case(
                     [(UnifiedInventory.total_received > 0, 
-                      (UnifiedInventory.total_received - UnifiedInventory.current_quantity) * 100.0 / UnifiedInventory.total_received)],
+                    (UnifiedInventory.total_received - UnifiedInventory.current_quantity) * 100.0 / UnifiedInventory.total_received)],
                     else_=0
                 )
             )
@@ -506,40 +492,11 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
                 "overstocked": overstocked_items
             },
             category_distribution=category_distribution,
-            recent_receipts=recent_receipts,
-            recent_usage=recent_usage,
-            pending_approvals=pending_approvals
+            recent_receipts=recent_receipts
         )
+
     
-    def get_usage_logs(self, db: Session, *, item_id: int, skip: int = 0, limit: int = 100) -> List[InventoryUsageLog]:
-        """품목 사용 이력 조회"""
-        return db.query(InventoryUsageLog).filter(
-            and_(
-                InventoryUsageLog.unified_inventory_id == item_id,
-                InventoryUsageLog.is_active == True
-            )
-        ).order_by(InventoryUsageLog.usage_date.desc()).offset(skip).limit(limit).all()
-    
-    def count_usage_logs(self, db: Session, *, item_id: int) -> int:
-        """품목 사용 이력 개수"""
-        return db.query(func.count(InventoryUsageLog.id)).filter(
-            and_(
-                InventoryUsageLog.unified_inventory_id == item_id,
-                InventoryUsageLog.is_active == True
-            )
-        ).scalar()
-    
-    def create_usage_log(self, db: Session, *, obj_in: InventoryUsageLogCreate) -> InventoryUsageLog:
-        """사용 이력 생성"""
-        obj_in_data = obj_in.dict()
-        obj_in_data['usage_date'] = datetime.now()
-        obj_in_data['is_active'] = True
-        
-        db_obj = InventoryUsageLog(**obj_in_data)
-        db.add(db_obj)
-        db.commit()
-        db.refresh(db_obj)
-        return db_obj
+
     
     def upload_image(self, db: Session, *, file, image_data: InventoryImageCreate) -> InventoryImage:
         """이미지 업로드"""
@@ -646,7 +603,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         return True
     
     def get_dashboard_data(self, db: Session) -> Dict[str, Any]:
-        """대시보드 데이터 조회"""
+        """대시보드 데이터 조회 - LOG 관련 제거"""
         stats = self.get_inventory_stats(db)
         
         # 월별 수령 현황 (최근 12개월)
@@ -668,22 +625,6 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
                 "count": count
             })
         
-        # 상위 사용 품목
-        top_usage_items = db.query(
-            UnifiedInventory.item_name,
-            func.count(InventoryUsageLog.id).label('usage_count'),
-            func.sum(InventoryUsageLog.quantity).label('total_quantity')
-        ).join(
-            InventoryUsageLog, 
-            UnifiedInventory.id == InventoryUsageLog.unified_inventory_id
-        ).filter(
-            InventoryUsageLog.usage_date >= datetime.now() - timedelta(days=30)
-        ).group_by(
-            UnifiedInventory.item_name
-        ).order_by(
-            func.count(InventoryUsageLog.id).desc()
-        ).limit(10).all()
-        
         # 알림 생성
         alerts = []
         
@@ -703,14 +644,6 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
                 "priority": "critical"
             })
         
-        # 승인 대기 알림
-        if stats.pending_approvals > 0:
-            alerts.append({
-                "type": "info",
-                "message": f"{stats.pending_approvals}건의 승인 대기 요청이 있습니다.",
-                "priority": "medium"
-            })
-        
         # 추천사항
         recommendations = []
         if stats.low_stock_items > 0:
@@ -727,26 +660,18 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             "recent_receipts": stats.recent_receipts,
             "category_chart": stats.category_distribution,
             "stock_status_chart": [
-                {"status": "정상", "count": stats.status_distribution["normal"], "percentage": 0},
-                {"status": "부족", "count": stats.status_distribution["low_stock"], "percentage": 0},
-                {"status": "없음", "count": stats.status_distribution["out_of_stock"], "percentage": 0},
-                {"status": "과잉", "count": stats.status_distribution["overstocked"], "percentage": 0}
+                {"status": "정상", "count": stats.status_distribution["normal"]},
+                {"status": "부족", "count": stats.status_distribution["low_stock"]},
+                {"status": "없음", "count": stats.status_distribution["out_of_stock"]},
+                {"status": "과잉", "count": stats.status_distribution["overstocked"]}
             ],
             "monthly_receipts": monthly_receipts,
-            "top_usage_items": [
-                {
-                    "item_name": item.item_name,
-                    "usage_count": item.usage_count,
-                    "total_quantity": int(item.total_quantity or 0)
-                }
-                for item in top_usage_items
-            ],
             "alerts": alerts,
             "recommendations": recommendations
         }
-    
+
     def get_alerts(self, db: Session, *, alert_type: Optional[str] = None, priority: Optional[str] = None) -> List[Dict[str, Any]]:
-        """재고 관련 알림 조회"""
+        """재고 관련 알림 조회 - LOG 관련 제거"""
         alerts = []
         
         # 재고 부족 알림
@@ -785,7 +710,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             alerts = [alert for alert in alerts if alert["priority"] == priority]
         
         return sorted(alerts, key=lambda x: {"critical": 4, "high": 3, "medium": 2, "low": 1}[x["priority"]], reverse=True)
-    
+        
     def get_recommendations(self, db: Session) -> List[str]:
         """재고 관리 추천사항"""
         recommendations = []
@@ -808,5 +733,28 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         
         return recommendations
 
+    def transfer_item(
+        self, 
+        db: Session, 
+        *, 
+        item_id: int, 
+        transfer_data
+    ) -> UnifiedInventory:
+        """품목 이동/전송 - 로그 없이 단순화"""
+        inventory = self.get(db=db, id=item_id)
+        if not inventory:
+            raise ValueError("품목을 찾을 수 없습니다.")
+        
+        # 재고 수량 업데이트 (로그 없이 간단하게)
+        inventory.current_quantity -= transfer_data.quantity
+        inventory.location = transfer_data.to_location
+        inventory.updated_at = datetime.now()
+        
+        db.add(inventory)
+        db.commit()
+        db.refresh(inventory)
+        
+        return inventory
+    
 # 인스턴스 생성
 inventory = CRUDInventory(UnifiedInventory)

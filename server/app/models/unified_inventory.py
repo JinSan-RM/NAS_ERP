@@ -1,6 +1,5 @@
-# server/app/models/unified_inventory.py
+# server/app/models/unified_inventory.py - InventoryUsageLog 제거
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, JSON
-from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 
@@ -18,9 +17,9 @@ class UnifiedInventory(Base):
     specifications = Column(Text, nullable=True)
     
     # 수량 정보
-    total_received = Column(Integer, default=0, nullable=False)  # 총 수령 수량
-    current_quantity = Column(Integer, default=0, nullable=False)  # 현재 보유 수량
-    reserved_quantity = Column(Integer, default=0, nullable=False)  # 사용중/예약 수량
+    total_received = Column(Integer, default=0, nullable=False)
+    current_quantity = Column(Integer, default=0, nullable=False)
+    reserved_quantity = Column(Integer, default=0, nullable=False)
     unit = Column(String(20), default="개")
     
     # 상태별 수량
@@ -32,7 +31,7 @@ class UnifiedInventory(Base):
     })
     
     # 수령 이력 (JSON으로 저장)
-    receipt_history = Column(JSON, default=[], nullable=False)  # 수령 이력 리스트
+    receipt_history = Column(JSON, default=[], nullable=False)
     
     # 가격 정보
     unit_price = Column(Float, nullable=True)
@@ -42,7 +41,6 @@ class UnifiedInventory(Base):
     # 위치 정보
     location = Column(String(200), nullable=True)
     warehouse = Column(String(100), nullable=True)
-    storage_section = Column(String(100), nullable=True)
     
     # 공급업체 정보
     supplier_name = Column(String(200), nullable=True)
@@ -61,7 +59,6 @@ class UnifiedInventory(Base):
     # 재고 관리 설정
     minimum_stock = Column(Integer, default=0)
     maximum_stock = Column(Integer, nullable=True)
-    reorder_point = Column(Integer, nullable=True)
     
     # 상태 정보
     is_active = Column(Boolean, default=True)
@@ -73,14 +70,15 @@ class UnifiedInventory(Base):
     notes = Column(Text, nullable=True)
     tags = Column(JSON, default=[])
     
+    # 구매 요청 연결
+    purchase_request_id = Column(Integer, ForeignKey("purchase_requests.id"), nullable=True)
+    
     # 시스템 필드
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     created_by = Column(String(100), nullable=True)
     updated_by = Column(String(100), nullable=True)
-    
-    # 관계 설정
-    usage_logs = relationship("InventoryUsageLog", back_populates="inventory_item")
+
     
     def __repr__(self):
         return f"<UnifiedInventory {self.item_code}: {self.item_name}>"
@@ -109,60 +107,17 @@ class UnifiedInventory(Base):
             return "overstocked"
         else:
             return "normal"
-        
-        
-class InventoryUsageLog(Base):
-    """품목 사용 이력 테이블"""
-    __tablename__ = "inventory_usage_logs"
 
-    id = Column(Integer, primary_key=True, index=True)
-    unified_inventory_id = Column(Integer, ForeignKey("unified_inventory.id"), nullable=False)
-    
-    # 사용 정보
-    usage_type = Column(String(50), nullable=False)  # 'consumption', 'return', 'transfer', 'disposal'
-    quantity = Column(Integer, nullable=False)
-    unit = Column(String(20), default="개")
-    
-    # 사용자 정보
-    user_name = Column(String(100), nullable=False)
-    user_email = Column(String(255), nullable=True)
-    department = Column(String(100), nullable=False)
-    
-    # 사용 목적 및 위치
-    purpose = Column(String(200), nullable=True)
-    project = Column(String(100), nullable=True)
-    from_location = Column(String(200), nullable=True)
-    to_location = Column(String(200), nullable=True)
-    
-    # 승인 정보
-    requires_approval = Column(Boolean, default=False)
-    approved_by = Column(String(100), nullable=True)
-    approved_date = Column(DateTime(timezone=True), nullable=True)
-    
-    # 반납 정보
-    expected_return_date = Column(DateTime(timezone=True), nullable=True)
-    actual_return_date = Column(DateTime(timezone=True), nullable=True)
-    return_condition = Column(String(50), nullable=True)
-    
-    # 시스템 필드
-    usage_date = Column(DateTime(timezone=True), server_default=func.now())
-    notes = Column(Text, nullable=True)
-    is_active = Column(Boolean, default=True)
-    
-    # 관계 설정
-    inventory_item = relationship("UnifiedInventory", back_populates="usage_logs")
-    
-    def __repr__(self):
-        return f"<InventoryUsageLog {self.usage_type}: {self.quantity} by {self.user_name}>"
 
-    
-# 이미지 업로드 테이블
+# InventoryUsageLog 클래스 완전 제거
+
+
 class InventoryImage(Base):
     """품목 이미지 관리 테이블"""
     __tablename__ = "inventory_images"
 
     id = Column(Integer, primary_key=True, index=True)
-    unified_inventory_id = Column(Integer, ForeignKey("unified_inventory.id"), nullable=False)
+    unified_inventory_id = Column(Integer, nullable=False)
     
     # 이미지 정보
     filename = Column(String(255), nullable=False)
@@ -172,15 +127,11 @@ class InventoryImage(Base):
     mime_type = Column(String(100), nullable=False)
     
     # 이미지 분류
-    image_type = Column(String(50), default="general")  # 'main', 'detail', 'packaging', 'manual', 'general'
+    image_type = Column(String(50), default="general")
     description = Column(String(200), nullable=True)
-    sort_order = Column(Integer, default=0)
     
     # 이미지 처리 정보
     thumbnail_path = Column(String(500), nullable=True)
-    compressed_path = Column(String(500), nullable=True)
-    width = Column(Integer, nullable=True)
-    height = Column(Integer, nullable=True)
     
     # 시스템 필드
     is_active = Column(Boolean, default=True)

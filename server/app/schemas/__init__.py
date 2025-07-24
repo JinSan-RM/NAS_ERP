@@ -34,7 +34,11 @@ from .unified_inventory import (
     ReceiptHistoryBase,
     ReceiptBase,
     ReceiptCreate,
-    ReceiptInDB
+    ReceiptInDB,
+    InventoryDashboard,
+    InventoryQuantityUpdate,
+    InventoryUsageLogList,
+    InventoryUsageLog,
 )
 
 
@@ -65,6 +69,9 @@ __all__ = [
     "UnifiedInventoryList",
     "UnifiedInventoryStats",
     "UnifiedInventoryBase",
+    "InventoryQuantityUpdate",
+    "InventoryDashboard",
+    "InventoryUsageLogList",
     "ReceiptHistoryCreate",
     "ReceiptHistoryInDB",
     "ReceiptHistoryBase",

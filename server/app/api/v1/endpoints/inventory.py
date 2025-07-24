@@ -283,78 +283,29 @@ def update_inventory_stock(
         raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
     return inventory
 
-@router.post("/{item_id}/quantity", response_model=schemas.UnifiedInventoryInDB)
+@router.patch("/{item_id}/quantity", response_model=schemas.UnifiedInventoryInDB)
 def update_inventory_quantity(
     item_id: int,
     quantity_update: schemas.InventoryQuantityUpdate,
     db: Session = Depends(get_db)
 ):
-    """재고 수량 변경 (사용 이력 포함)"""
+    """재고 수량 간단 변경 (로그 없음)"""
     inventory = crud.inventory.get(db=db, id=item_id)
     if not inventory:
         raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
     
-    # 사용 이력 추가
-    usage_log = schemas.InventoryUsageLogCreate(
-        unified_inventory_id=item_id,
-        usage_type=quantity_update.usage_type,
-        quantity=abs(quantity_update.quantity_change),
+    # 간단한 수량 업데이트 (로그 없이)
+    updated_inventory = crud.inventory.update_quantity(
+        db=db, 
+        item_id=item_id, 
+        quantity_change=quantity_update.quantity_change,
         user_name=quantity_update.user_name,
         department=quantity_update.department,
         purpose=quantity_update.purpose,
         notes=quantity_update.notes
     )
     
-    # 수량 업데이트
-    updated_inventory = crud.inventory.update_quantity_with_log(
-        db=db, 
-        item_id=item_id, 
-        quantity_change=quantity_update.quantity_change,
-        usage_log=usage_log
-    )
-    
     return updated_inventory
-
-# 사용 이력 관리 엔드포인트들
-@router.get("/{item_id}/usage-logs", response_model=schemas.InventoryUsageLogList)
-def read_usage_logs(
-    item_id: int,
-    db: Session = Depends(get_db),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=1000)
-):
-    """품목 사용 이력 조회"""
-    inventory = crud.inventory.get(db=db, id=item_id)
-    if not inventory:
-        raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
-    
-    usage_logs = crud.inventory.get_usage_logs(
-        db=db, item_id=item_id, skip=skip, limit=limit
-    )
-    total = crud.inventory.count_usage_logs(db=db, item_id=item_id)
-    
-    return {
-        "items": usage_logs,
-        "total": total,
-        "page": skip // limit + 1,
-        "size": limit,
-        "pages": (total + limit - 1) // limit if total > 0 else 0
-    }
-
-@router.post("/{item_id}/usage-logs", response_model=schemas.InventoryUsageLog)
-def add_usage_log(
-    item_id: int,
-    usage_log: schemas.InventoryUsageLogCreate,
-    db: Session = Depends(get_db)
-):
-    """사용 이력 추가"""
-    inventory = crud.inventory.get(db=db, id=item_id)
-    if not inventory:
-        raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
-    
-    usage_log.unified_inventory_id = item_id
-    created_log = crud.inventory.create_usage_log(db=db, obj_in=usage_log)
-    return created_log
 
 # 이미지 관리 엔드포인트들
 @router.post("/{item_id}/images", response_model=schemas.ImageUploadResponse)
@@ -464,74 +415,74 @@ def generate_qr_code(
     
     return qr_code_data
 
-# Excel 관련 엔드포인트들
-@router.get("/export", response_class=FileResponse)
-def export_inventory_excel(
-    db: Session = Depends(get_db),
-    include_receipts: bool = Query(default=False),
-    include_usage_logs: bool = Query(default=False),
-    include_images: bool = Query(default=False),
-    categories: Optional[List[str]] = Query(None),
-):
-    """재고 데이터 Excel 내보내기"""
-    export_options = schemas.InventoryExportOptions(
-        include_receipts=include_receipts,
-        include_usage_logs=include_usage_logs,
-        include_images=include_images,
-        categories=categories
-    )
+# # Excel 관련 엔드포인트들
+# @router.get("/export", response_class=FileResponse)
+# def export_inventory_excel(
+#     db: Session = Depends(get_db),
+#     include_receipts: bool = Query(default=False),
+#     include_usage_logs: bool = Query(default=False),
+#     include_images: bool = Query(default=False),
+#     categories: Optional[List[str]] = Query(None),
+# ):
+#     """재고 데이터 Excel 내보내기"""
+#     export_options = schemas.InventoryExportOptions(
+#         include_receipts=include_receipts,
+#         include_usage_logs=include_usage_logs,
+#         include_images=include_images,
+#         categories=categories
+#     )
     
-    file_path = crud.inventory.export_to_excel(db=db, options=export_options)
+#     file_path = crud.inventory.export_to_excel(db=db, options=export_options)
     
-    return FileResponse(
-        path=file_path,
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        filename=f'inventory_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-    )
+#     return FileResponse(
+#         path=file_path,
+#         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+#         filename=f'inventory_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+#     )
 
-@router.post("/bulk-upload", response_model=schemas.InventoryImportResult)
-def bulk_upload_inventory(
-    file: UploadFile = File(...),
-    db: Session = Depends(get_db)
-):
-    """Excel 파일로 품목 일괄 업로드"""
-    if not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(status_code=400, detail="Excel 파일만 업로드 가능합니다.")
+# @router.post("/bulk-upload", response_model=schemas.InventoryImportResult)
+# def bulk_upload_inventory(
+#     file: UploadFile = File(...),
+#     db: Session = Depends(get_db)
+# ):
+#     """Excel 파일로 품목 일괄 업로드"""
+#     if not file.filename.endswith(('.xlsx', '.xls')):
+#         raise HTTPException(status_code=400, detail="Excel 파일만 업로드 가능합니다.")
     
-    try:
-        import_result = crud.inventory.import_from_excel(db=db, file=file)
-        return import_result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"파일 처리 실패: {str(e)}")
+#     try:
+#         import_result = crud.inventory.import_from_excel(db=db, file=file)
+#         return import_result
+#     except Exception as e:
+#         raise HTTPException(status_code=500, detail=f"파일 처리 실패: {str(e)}")
 
-@router.get("/template/download", response_class=FileResponse)
-def download_template():
-    """품목 등록 템플릿 다운로드"""
-    template_path = crud.inventory.generate_template()
+# @router.get("/template/download", response_class=FileResponse)
+# def download_template():
+#     """품목 등록 템플릿 다운로드"""
+#     template_path = crud.inventory.generate_template()
     
-    return FileResponse(
-        path=template_path,
-        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-        filename='unified_inventory_template.xlsx'
-    )
+#     return FileResponse(
+#         path=template_path,
+#         media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+#         filename='unified_inventory_template.xlsx'
+#     )
 
-# 검색 및 필터링 고급 엔드포인트들
-@router.post("/search", response_model=schemas.UnifiedInventoryList)
-def advanced_search(
-    search_query: schemas.AdvancedSearchQuery,
-    db: Session = Depends(get_db),
-    skip: int = Query(default=0, ge=0),
-    limit: int = Query(default=100, ge=1, le=1000),
-):
-    """고급 검색"""
-    results = crud.inventory.advanced_search(
-        db=db, 
-        query=search_query, 
-        skip=skip, 
-        limit=limit
-    )
+# # 검색 및 필터링 고급 엔드포인트들
+# @router.post("/search", response_model=schemas.UnifiedInventoryList)
+# def advanced_search(
+#     search_query: schemas.AdvancedSearchQuery,
+#     db: Session = Depends(get_db),
+#     skip: int = Query(default=0, ge=0),
+#     limit: int = Query(default=100, ge=1, le=1000),
+# ):
+#     """고급 검색"""
+#     results = crud.inventory.advanced_search(
+#         db=db, 
+#         query=search_query, 
+#         skip=skip, 
+#         limit=limit
+#     )
     
-    return results
+#     return results
 
 @router.get("/filters/options", response_model=Dict[str, List[str]])
 def get_filter_options(db: Session = Depends(get_db)):
@@ -545,36 +496,36 @@ def get_filter_options(db: Session = Depends(get_db)):
         "tags": crud.inventory.get_all_tags(db=db)
     }
 
-# 통계 및 분석 엔드포인트들
-@router.get("/analytics/usage", response_model=List[Dict[str, Any]])
-def get_usage_analytics(
-    db: Session = Depends(get_db),
-    period: str = Query(default="monthly", regex="^(daily|weekly|monthly|quarterly|yearly)$"),
-    limit: int = Query(default=10, ge=1, le=100)
-):
-    """사용 분석 데이터"""
-    return crud.inventory.get_usage_analytics(db=db, period=period, limit=limit)
+# # 통계 및 분석 엔드포인트들
+# @router.get("/analytics/usage", response_model=List[Dict[str, Any]])
+# def get_usage_analytics(
+#     db: Session = Depends(get_db),
+#     period: str = Query(default="monthly", regex="^(daily|weekly|monthly|quarterly|yearly)$"),
+#     limit: int = Query(default=10, ge=1, le=100)
+# ):
+#     """사용 분석 데이터"""
+#     return crud.inventory.get_usage_analytics(db=db, period=period, limit=limit)
 
-@router.get("/analytics/trends", response_model=Dict[str, Any])
-def get_inventory_trends(
-    db: Session = Depends(get_db),
-    months: int = Query(default=12, ge=1, le=24)
-):
-    """재고 동향 분석"""
-    return crud.inventory.get_inventory_trends(db=db, months=months)
+# @router.get("/analytics/trends", response_model=Dict[str, Any])
+# def get_inventory_trends(
+#     db: Session = Depends(get_db),
+#     months: int = Query(default=12, ge=1, le=24)
+# ):
+#     """재고 동향 분석"""
+#     return crud.inventory.get_inventory_trends(db=db, months=months)
 
-@router.get("/analytics/predictions", response_model=Dict[str, Any])
-def get_stock_predictions(
-    db: Session = Depends(get_db),
-    item_id: Optional[int] = Query(None),
-    category: Optional[str] = Query(None)
-):
-    """재고 예측 분석"""
-    return crud.inventory.get_stock_predictions(
-        db=db, 
-        item_id=item_id, 
-        category=category
-    )
+# @router.get("/analytics/predictions", response_model=Dict[str, Any])
+# def get_stock_predictions(
+#     db: Session = Depends(get_db),
+#     item_id: Optional[int] = Query(None),
+#     category: Optional[str] = Query(None)
+# ):
+#     """재고 예측 분석"""
+#     return crud.inventory.get_stock_predictions(
+#         db=db, 
+#         item_id=item_id, 
+#         category=category
+#     )
 
 # 알림 및 알림 엔드포인트들
 @router.get("/alerts", response_model=List[Dict[str, Any]])
