@@ -1,7 +1,7 @@
 # server/app/models/__init__.py
 from .inventory import Inventory
 from .purchase_request import PurchaseRequest, RequestStatus, UrgencyLevel, PurchaseMethod
-from .unified_inventory import UnifiedInventory, InventoryUsageLog
+from .unified_inventory import UnifiedInventory
 
 __all__ = [
     "Inventory",
@@ -9,6 +9,5 @@ __all__ = [
     "RequestStatus", 
     "UrgencyLevel", 
     "PurchaseMethod",
-    "UnifiedInventory",
-    "InventoryUsageLog"
+    "UnifiedInventory"
 ]

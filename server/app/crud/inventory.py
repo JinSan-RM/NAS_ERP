@@ -2,9 +2,9 @@
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, extract, text
+from sqlalchemy import func, or_, and_, extract, text, case
 from app.crud.base import CRUDBase
-from app.models.unified_inventory import UnifiedInventory, InventoryUsageLog, InventoryImage
+from app.models.unified_inventory import UnifiedInventory, InventoryImage
 from app.schemas.unified_inventory import (
     UnifiedInventoryCreate, 
     UnifiedInventoryUpdate, 
@@ -466,14 +466,16 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             )
         ).scalar() or 0
         
-        # 평균 사용률 계산
+        # whens를 별도 튜플로 정의 (리스트 아님)
+        whens = (
+            (UnifiedInventory.total_received > 0, (UnifiedInventory.total_received - UnifiedInventory.current_quantity) * 100.0 / UnifiedInventory.total_received),
+            # 추가 조건이 있으면 여기에 (condition, value) 튜플 추가
+        )
+
+        # case() 호출: positional 먼저, keyword 나중에
         avg_utilization = db.query(
             func.avg(
-                func.case(
-                    [(UnifiedInventory.total_received > 0, 
-                    (UnifiedInventory.total_received - UnifiedInventory.current_quantity) * 100.0 / UnifiedInventory.total_received)],
-                    else_=0
-                )
+                case(*whens, else_=0)  # else_를 0으로 직접 설정 (default_value 대신)
             )
         ).filter(UnifiedInventory.is_active == True).scalar() or 0
         

@@ -11,47 +11,36 @@ class PurchaseRequestBase(BaseModel):
     quantity: int = Field(default=1, ge=1, description="수량")
     unit: str = Field(default="개", max_length=20, description="단위")
     estimated_unit_price: Optional[float] = Field(default=0.0, ge=0, description="예상 단가")
-    total_budget: float = Field(..., ge=0, description="총 예산")
     currency: str = Field(default="KRW", max_length=10, description="통화")
     
-    category: ItemCategory = Field(default=ItemCategory.OTHER, description="카테고리")
+    category: Optional[str] = Field(None, description="카테고리")
     urgency: UrgencyLevel = Field(default=UrgencyLevel.NORMAL, description="긴급도")
-    purchase_method: PurchaseMethod = Field(default=PurchaseMethod.DIRECT, description="구매 방법")
     
     requester_name: str = Field(..., max_length=100, description="요청자명")
     requester_email: Optional[str] = Field(None, max_length=255, description="요청자 이메일")
     department: str = Field(..., max_length=100, description="부서")
-    position: Optional[str] = Field(None, max_length=100, description="직급")
     phone_number: Optional[str] = Field(None, max_length=20, description="연락처")
     
     project: Optional[str] = Field(None, max_length=200, description="프로젝트")
-    budget_code: Optional[str] = Field(None, max_length=50, description="링크")
-    cost_center: Optional[str] = Field(None, max_length=50, description="코스트 센터")
+    budget_code: Optional[str] = Field(None, max_length=50, description="예산코드")
     
     preferred_supplier: Optional[str] = Field(None, max_length=200, description="선호 공급업체")
-    supplier_contact: Optional[str] = Field(None, max_length=255, description="공급업체 연락처")
-    
-    expected_delivery_date: Optional[datetime] = Field(None, description="희망 납기일")
-    required_by_date: Optional[datetime] = Field(None, description="필요 완료일")
     
     justification: str = Field(..., description="구매 사유")
-    business_case: Optional[str] = Field(None, description="비즈니스 케이스")
-    notes: Optional[str] = Field(None, description="비고")
-
-    @field_validator('total_budget', mode='before')
-    @classmethod
-    def calculate_total_budget(cls, v, info):
-        if info.data:
-            quantity = info.data.get('quantity', 1)
-            estimated_unit_price = info.data.get('estimated_unit_price', 0)
-            if estimated_unit_price and estimated_unit_price > 0:
-                return quantity * estimated_unit_price
-        return v or 0.0
+    additional_notes: Optional[str] = Field(None, description="비고")
+    # 실제 DB에 없는 필드들은 기본값 제공
+    justification: Optional[str] = None
+    status: str = "SUBMITTED"  # 기본값
+    is_active: bool = True     # 기본값
+    created_at: Optional[datetime] = None
+    priority_score: Optional[float] = None
+    class Config:
+        from_attributes = True
 
 
 # 생성용 스키마
 class PurchaseRequestCreate(PurchaseRequestBase):
-    status: Optional[RequestStatus] = Field(default=RequestStatus.SUBMITTED, description="상태")
+    pass
 
 # 업데이트용 스키마
 class PurchaseRequestUpdate(BaseModel):
@@ -60,66 +49,55 @@ class PurchaseRequestUpdate(BaseModel):
     quantity: Optional[int] = Field(None, ge=1, description="수량")
     unit: Optional[str] = Field(None, max_length=20, description="단위")
     estimated_unit_price: Optional[float] = Field(None, ge=0, description="예상 단가")
-    total_budget: Optional[float] = Field(None, ge=0, description="총 예산")
     currency: Optional[str] = Field(None, max_length=10, description="통화")
     
-    category: Optional[ItemCategory] = Field(None, description="카테고리")
+    category: Optional[str] = Field(None, description="카테고리")
     urgency: Optional[UrgencyLevel] = Field(None, description="긴급도")
-    purchase_method: Optional[PurchaseMethod] = Field(None, description="구매 방법")
     
     requester_name: Optional[str] = Field(None, max_length=100, description="요청자명")
     requester_email: Optional[str] = Field(None, max_length=255, description="요청자 이메일")
     department: Optional[str] = Field(None, max_length=100, description="부서")
-    position: Optional[str] = Field(None, max_length=100, description="직급")
     phone_number: Optional[str] = Field(None, max_length=20, description="연락처")
     
     project: Optional[str] = Field(None, max_length=200, description="프로젝트")
-    budget_code: Optional[str] = Field(None, max_length=50, description="링크")
-    cost_center: Optional[str] = Field(None, max_length=50, description="코스트 센터")
+    budget_code: Optional[str] = Field(None, max_length=50, description="예산코드")
     
     preferred_supplier: Optional[str] = Field(None, max_length=200, description="선호 공급업체")
-    supplier_contact: Optional[str] = Field(None, max_length=255, description="공급업체 연락처")
-    
-    expected_delivery_date: Optional[datetime] = Field(None, description="희망 납기일")
-    required_by_date: Optional[datetime] = Field(None, description="필요 완료일")
     
     justification: Optional[str] = Field(None, description="구매 사유")
-    business_case: Optional[str] = Field(None, description="비즈니스 케이스")
-    notes: Optional[str] = Field(None, description="비고")
+    additional_notes: Optional[str] = Field(None, description="비고")
     
     status: Optional[RequestStatus] = Field(None, description="상태")
+
 
 # 승인/거절용 스키마
 class PurchaseRequestApproval(BaseModel):
     action: str = Field(..., pattern="^(approve|reject)$", description="승인 액션")
     comments: Optional[str] = Field(None, description="승인/거절 코멘트")
     approval_level: Optional[int] = Field(None, description="승인 레벨")
-
-# 응답용 스키마
+    
+# 응답용 스키마 (단순화)
 class PurchaseRequestInDB(PurchaseRequestBase):
     id: int
-    request_number: str
+    request_number: Optional[str]
+    total_budget: float
     status: RequestStatus
-    approval_level: int
-    current_approver: Optional[str] = None
-    approved_date: Optional[datetime] = None
-    approved_by: Optional[str] = None
-    rejected_date: Optional[datetime] = None
-    rejected_by: Optional[str] = None
+    
+    # 승인 관련 (단순화)
+    approval_date: Optional[datetime] = None
     rejection_reason: Optional[str] = None
     
-    attachment_urls: Optional[str] = None
+    # 완료 처리 관련
+    completed_date: Optional[datetime] = None
+    completed_by: Optional[str] = None
+    completion_notes: Optional[str] = None
+    inventory_item_id: Optional[int] = None
+    
+    # 시스템 필드
     is_active: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    created_by: Optional[str] = None
-    updated_by: Optional[str] = None
-    
     priority_score: int
-    estimated_approval_time: Optional[int] = None
-    actual_approval_time: Optional[int] = None
-    
-    request_date: datetime
     
     model_config = ConfigDict(from_attributes=True)
 
@@ -137,18 +115,14 @@ class PurchaseRequestList(BaseModel):
 # 통계 스키마 - 수정된 부분
 class PurchaseRequestStats(BaseModel):
     total: int
-    pending: int
     approved: int
     rejected: int
+    completed: Optional[int] = 0
     this_month: int
     total_budget: float
-    average_approval_time: Optional[float] = None
     
-    model_config = ConfigDict(
-        from_attributes=True,
-        populate_by_name=True
-    )
-
+    model_config = ConfigDict(from_attributes=True)
+    
 # 검색 필터
 class PurchaseRequestFilter(BaseModel):
     search: Optional[str] = None
@@ -161,3 +135,122 @@ class PurchaseRequestFilter(BaseModel):
     date_to: Optional[datetime] = None
     min_budget: Optional[float] = None
     max_budget: Optional[float] = None
+    
+# 완료 처리용 스키마 (구매 요청 완료 → 품목 생성에 필요)
+class PurchaseRequestCompletionData(BaseModel):
+    received_quantity: Optional[int] = None
+    receiver_name: Optional[str] = None
+    receiver_email: Optional[str] = None
+    received_date: Optional[datetime] = None
+    location: Optional[str] = "창고"
+    condition: Optional[str] = "good"
+    notes: Optional[str] = None
+    completed_by: Optional[str] = "시스템"
+    
+    
+class PurchaseRequestResponse(BaseModel):
+    # 실제 DB 필드들
+    id: int
+    request_number: Optional[str] = None
+    item_name: str
+    specifications: Optional[str] = None
+    quantity: int
+    unit: Optional[str] = "개"
+    estimated_unit_price: Optional[float] = None
+    total_budget: Optional[float] = None
+    currency: Optional[str] = "KRW"
+    category: Optional[str] = None
+    urgency: str
+    purchase_method: Optional[str] = None
+    requester_name: str
+    requester_email: Optional[str] = None
+    department: str
+    position: Optional[str] = None
+    
+    # FE가 요구하는 필드들 - 기본값 제공
+    phone_number: Optional[str] = None
+    project: Optional[str] = None
+    budget_code: Optional[str] = None
+    cost_center: Optional[str] = None
+    preferred_supplier: Optional[str] = None
+    supplier_contact: Optional[str] = None
+    request_date: str = Field(default_factory=lambda: datetime.now().isoformat())
+    expected_delivery_date: Optional[str] = None
+    required_by_date: Optional[str] = None
+    status: str = "SUBMITTED"
+    approval_level: Optional[int] = None
+    current_approver: Optional[str] = None
+    approved_date: Optional[str] = None
+    approved_by: Optional[str] = None
+    rejected_date: Optional[str] = None
+    rejected_by: Optional[str] = None
+    rejection_reason: Optional[str] = None
+    justification: str = ""
+    business_case: Optional[str] = None
+    notes: Optional[str] = None
+    attachment_urls: Optional[str] = None
+    is_active: Optional[bool] = True
+    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    updated_at: Optional[str] = None
+    created_by: Optional[str] = None
+    updated_by: Optional[str] = None
+    priority_score: Optional[float] = 0.0
+    estimated_approval_time: Optional[int] = 0
+    actual_approval_time: Optional[int] = 0
+
+    @classmethod
+    def from_orm(cls, obj):
+        """DB 객체에서 Response 스키마로 변환"""
+        return cls(
+            # 실제 DB 필드들
+            id=obj.id,
+            request_number=getattr(obj, 'request_number', f"PR{obj.id:010d}"),
+            item_name=obj.item_name,
+            specifications=getattr(obj, 'specifications', None),
+            quantity=obj.quantity,
+            unit=getattr(obj, 'unit', '개'),
+            estimated_unit_price=getattr(obj, 'estimated_unit_price', None),
+            total_budget=getattr(obj, 'total_budget', None),
+            currency=getattr(obj, 'currency', 'KRW'),
+            category=getattr(obj, 'category', None),
+            urgency=obj.urgency,
+            purchase_method=getattr(obj, 'purchase_method', None),
+            requester_name=obj.requester_name,
+            requester_email=getattr(obj, 'requester_email', None),
+            department=obj.department,
+            position=getattr(obj, 'position', None),
+            
+            # FE가 요구하는 필드들 - 기본값 제공
+            phone_number=None,
+            project=None,
+            budget_code=None,
+            cost_center=None,
+            preferred_supplier=None,
+            supplier_contact=None,
+            request_date=datetime.now().isoformat(),
+            expected_delivery_date=None,
+            required_by_date=None,
+            status="SUBMITTED",
+            approval_level=None,
+            current_approver=None,
+            approved_date=None,
+            approved_by=None,
+            rejected_date=None,
+            rejected_by=None,
+            rejection_reason=None,
+            justification="",
+            business_case=None,
+            notes=None,
+            attachment_urls=None,
+            is_active=True,
+            created_at=datetime.now().isoformat(),
+            updated_at=None,
+            created_by=None,
+            updated_by=None,
+            priority_score=0,  # None 대신 0 사용
+            estimated_approval_time=0,
+            actual_approval_time=0
+        )
+
+    class Config:
+        from_attributes = True

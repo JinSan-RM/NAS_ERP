@@ -9,7 +9,7 @@ from sqlalchemy import text
 from app.core.database import engine, SessionLocal
 from app.models.inventory import Inventory
 from app.models.receipt import Receipt
-from app.models.unified_inventory import UnifiedInventory, InventoryUsageLog, InventoryImage
+from app.models.unified_inventory import UnifiedInventory, InventoryImage
 import logging
 from datetime import datetime
 from typing import Dict, List
@@ -40,11 +40,10 @@ def migrate_database():
 
 def create_new_tables():
     """새로운 테이블들 생성"""
-    from app.models.unified_inventory import UnifiedInventory, InventoryUsageLog, InventoryImage
+    from app.models.unified_inventory import UnifiedInventory, InventoryImage
     
     # 테이블 생성
     UnifiedInventory.__table__.create(bind=engine, checkfirst=True)
-    InventoryUsageLog.__table__.create(bind=engine, checkfirst=True)
     InventoryImage.__table__.create(bind=engine, checkfirst=True)
     
     logger.info("✅ 새 테이블 생성 완료")

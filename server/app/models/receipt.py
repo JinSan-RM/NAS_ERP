@@ -18,7 +18,7 @@ class Receipt(Base):
     receipt_number = Column(String(50), unique=True, index=True, nullable=False)
     
     # 구매 요청 연결 (선택사항)
-    purchase_request_id = Column(Integer, ForeignKey("purchase_requests.id"), nullable=True)
+    purchase_request_id = Column(Integer, nullable=True)
     
     # 품목 정보
     item_name = Column(String(200), nullable=False, index=True)
@@ -67,7 +67,7 @@ class Receipt(Base):
     updated_by = Column(String(100))
     
     # 관계 설정
-    purchase_request = relationship("PurchaseRequest", back_populates="receipts")
+    # purchase_request = relationship("PurchaseRequest", back_populates="receipts")
     
     def __repr__(self):
         return f"<Receipt {self.receipt_number}: {self.item_name}>"

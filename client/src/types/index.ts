@@ -191,7 +191,7 @@ export const METHOD_LABELS: Record<PurchaseMethod, string> = {
 // 재고 관리 관련 타입들
 export interface InventoryItem {
   id: number;
-  item_code: string;
+  // item_code: string;
   item_name: string;
   category?: string;
   brand?: string;
@@ -267,7 +267,7 @@ export interface UploadResult {
   updated_count?: number;
   failed_count?: number;
   request_numbers?: string[];
-  item_codes?: string[];
+  // item_codes?: string[];
   errors?: Array<{
     row: number;
     field: string;

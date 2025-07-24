@@ -4,6 +4,8 @@ class RequestStatus(str, Enum):
     SUBMITTED = "SUBMITTED"
     CANCELLED = "CANCELLED"
     COMPLETED = "COMPLETED"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED" 
 
 class UrgencyLevel(str, Enum):
     LOW = "LOW"

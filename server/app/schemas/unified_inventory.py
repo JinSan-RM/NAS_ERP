@@ -18,7 +18,15 @@ class ReceiptHistoryBase(BaseModel):
     notes: Optional[str] = Field(None, description="비고")
 
 class ReceiptHistoryCreate(ReceiptHistoryBase):
-    pass
+    receipt_number: Optional[str] = None
+    received_quantity: int
+    receiver_name: str
+    receiver_email: Optional[str] = None
+    department: str
+    received_date: str
+    location: Optional[str] = None
+    condition: Optional[str] = 'good'
+    notes: Optional[str] = None
 
 class ReceiptHistoryInDB(ReceiptHistoryBase):
     model_config = ConfigDict(from_attributes=True)
@@ -104,46 +112,7 @@ class UnifiedInventoryInDB(UnifiedInventoryBase):
     stock_status: str = Field(description="재고 상태")
     model_config = ConfigDict(from_attributes=True)
     
-# InventoryUsageLogBase 클래스 정의 추가 (누락된 것 같음)
-class InventoryUsageLogBase(BaseModel):
-    """사용 로그 기본 스키마"""
-    item_id: int = Field(..., description="품목 ID")
-    usage_type: str = Field(..., max_length=50, description="사용 유형 (출고/반납/소모/폐기)")
-    quantity: int = Field(..., ge=1, description="수량")
-    used_by: str = Field(..., max_length=100, description="사용자")
-    department: str = Field(..., max_length=100, description="부서")
-    purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
-    location: Optional[str] = Field(None, max_length=100, description="사용 장소")
-    notes: Optional[str] = Field(None, description="비고")
-    used_date: datetime = Field(..., description="사용일")
-
-
-class InventoryUsageLogInDB(InventoryUsageLogBase):
-    """DB용 사용 로그 스키마"""
-    id: int
-    created_at: datetime
-    updated_at: Optional[datetime] = None
-    is_active: bool = True
-    
-    model_config = ConfigDict(from_attributes=True)
-
-# 사용 이력 스키마
-class InventoryUsageLogInDB(InventoryUsageLogBase):
-    id: int
-    unified_inventory_id: int
-    requires_approval: bool
-    approved_by: Optional[str]
-    approved_date: Optional[datetime]
-    actual_return_date: Optional[datetime]
-    return_condition: Optional[str]
-    usage_date: datetime
-    is_active: bool
-    
-    model_config = ConfigDict(from_attributes=True)
-
-class InventoryUsageLog(InventoryUsageLogInDB):
-    pass
-
+#
 # 이미지 관련 스키마
 class InventoryImageBase(BaseModel):
     image_type: str = Field(default="general", description="이미지 유형")
@@ -318,33 +287,3 @@ class QRCodeResponse(BaseModel):
     
     expected_return_date: Optional[datetime] = Field(None, description="예상 반납일")
     notes: Optional[str] = Field(None, description="비고")
-
-# 고급 검색용 스키마
-class AdvancedSearchQuery(BaseModel):
-    keywords: Optional[List[str]] = None
-    category_filters: Optional[List[str]] = None
-    price_range: Optional[Dict[str, float]] = None
-    date_range: Optional[Dict[str, datetime]] = None
-    stock_status_filters: Optional[List[str]] = None
-    location_filters: Optional[List[str]] = None
-    supplier_filters: Optional[List[str]] = None
-    sort_by: Optional[str] = "item_name"
-    sort_order: Optional[str] = "asc"
-
-class InventoryUsageLogUpdate(BaseModel):
-    usage_type: Optional[str] = Field(None, description="사용 유형")
-    quantity: Optional[int] = Field(None, ge=1, description="수량")
-    unit: Optional[str] = Field(None, max_length=20, description="단위")
-    
-    user_name: Optional[str] = Field(None, max_length=100, description="사용자명")
-    user_email: Optional[str] = Field(None, max_length=255, description="사용자 이메일")
-    department: Optional[str] = Field(None, max_length=100, description="부서")
-    
-    purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
-    project: Optional[str] = Field(None, max_length=100, description="프로젝트")
-    from_location: Optional[str] = Field(None, max_length=200, description="출발 위치")
-    to_location: Optional[str] = Field(None, max_length=200, description="도착 위치")
-    
-    expected_return_date: Optional[datetime] = Field(None, description="예상 반납일")
-    notes: Optional[str] = Field(None, description="비고")
-    

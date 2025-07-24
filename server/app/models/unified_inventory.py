@@ -1,4 +1,4 @@
-# server/app/models/unified_inventory.py - InventoryUsageLog 제거
+# server/app/models/unified_inventory.py 
 from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, ForeignKey, JSON
 from sqlalchemy.sql import func
 from app.core.database import Base
@@ -71,7 +71,7 @@ class UnifiedInventory(Base):
     tags = Column(JSON, default=[])
     
     # 구매 요청 연결
-    purchase_request_id = Column(Integer, ForeignKey("purchase_requests.id"), nullable=True)
+    purchase_request_id = Column(Integer, nullable=True)
     
     # 시스템 필드
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -109,7 +109,6 @@ class UnifiedInventory(Base):
             return "normal"
 
 
-# InventoryUsageLog 클래스 완전 제거
 
 
 class InventoryImage(Base):

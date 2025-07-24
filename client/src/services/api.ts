@@ -994,6 +994,7 @@ export const inventoryApi = {
       
       return receipt;
     } catch (error) {
+      console.log('오류 상세:', error.response?.data?.detail)
       console.error('수령 완료 처리 실패:', error);
       throw error;
     }

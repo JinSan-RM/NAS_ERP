@@ -1,7 +1,9 @@
 # server/app/api/v1/endpoints/inventory.py
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlalchemy.orm import Session
+from datetime import datetime
+
 
 from app import crud, schemas
 from app.api.deps import get_db
@@ -24,8 +26,8 @@ def read_inventories(
     is_consumable: Optional[bool] = Query(None),
     requires_approval: Optional[bool] = Query(None),
     is_active: Optional[bool] = Query(None),
-    last_received_from: Optional[str] = Query(None),
-    last_received_to: Optional[str] = Query(None),
+    last_received_from: Optional[datetime] = Query(None),
+    last_received_to: Optional[datetime] = Query(None),
     min_quantity: Optional[int] = Query(None),
     max_quantity: Optional[int] = Query(None),
     has_images: Optional[bool] = Query(None),
@@ -169,17 +171,17 @@ def add_receipt(
     receipt_in: schemas.ReceiptHistoryCreate,
     db: Session = Depends(get_db)
 ):
-    """수령 내역 추가"""
-    inventory = crud.inventory.get(db=db, id=item_id)
-    if not inventory:
-        raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
-    
-    inventory = crud.inventory.add_receipt(
-        db=db,
-        item_id=item_id,
-        receipt_in=receipt_in
-    )
-    return inventory
+    try:
+        # 기존 로직
+        inventory = crud.inventory.get(db=db, id=item_id)
+        if not inventory:
+            raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
+        
+        inventory = crud.inventory.add_receipt(db=db, item_id=item_id, receipt_in=receipt_in)
+        return inventory
+    except Exception as e:
+        print("오류 상세:", str(e))
+        raise
 
 @router.put("/{item_id}/receipts/{receipt_number}", response_model=schemas.UnifiedInventoryInDB)
 def update_receipt(
@@ -466,24 +468,6 @@ def generate_qr_code(
 #         filename='unified_inventory_template.xlsx'
 #     )
 
-# # 검색 및 필터링 고급 엔드포인트들
-# @router.post("/search", response_model=schemas.UnifiedInventoryList)
-# def advanced_search(
-#     search_query: schemas.AdvancedSearchQuery,
-#     db: Session = Depends(get_db),
-#     skip: int = Query(default=0, ge=0),
-#     limit: int = Query(default=100, ge=1, le=1000),
-# ):
-#     """고급 검색"""
-#     results = crud.inventory.advanced_search(
-#         db=db, 
-#         query=search_query, 
-#         skip=skip, 
-#         limit=limit
-#     )
-    
-#     return results
-
 @router.get("/filters/options", response_model=Dict[str, List[str]])
 def get_filter_options(db: Session = Depends(get_db)):
     """필터 옵션 조회 (카테고리, 브랜드, 공급업체 등)"""
@@ -496,15 +480,6 @@ def get_filter_options(db: Session = Depends(get_db)):
         "tags": crud.inventory.get_all_tags(db=db)
     }
 
-# # 통계 및 분석 엔드포인트들
-# @router.get("/analytics/usage", response_model=List[Dict[str, Any]])
-# def get_usage_analytics(
-#     db: Session = Depends(get_db),
-#     period: str = Query(default="monthly", regex="^(daily|weekly|monthly|quarterly|yearly)$"),
-#     limit: int = Query(default=10, ge=1, le=100)
-# ):
-#     """사용 분석 데이터"""
-#     return crud.inventory.get_usage_analytics(db=db, period=period, limit=limit)
 
 # @router.get("/analytics/trends", response_model=Dict[str, Any])
 # def get_inventory_trends(
@@ -546,13 +521,13 @@ def get_inventory_recommendations(db: Session = Depends(get_db)):
     """재고 관리 추천사항"""
     return crud.inventory.get_recommendations(db=db)
 
-# 구매 요청에서 품목 생성 엔드포인트
+# ✅ 유지해야 할 엔드포인트: 구매 요청에서 품목 생성
 @router.post("/from-purchase-request", response_model=schemas.UnifiedInventoryInDB)
 def create_inventory_from_purchase(
     purchase_data: schemas.CreateInventoryFromPurchase,
     db: Session = Depends(get_db)
 ):
-    """구매 요청에서 품목 생성"""
+    """구매 요청에서 품목 생성 - 이건 유지!"""
     # 구매 요청 존재 확인
     purchase_request = crud.purchase_request.get(db=db, id=purchase_data.purchase_request_id)
     if not purchase_request:
@@ -577,59 +552,3 @@ def create_inventory_from_purchase(
     
     return inventory_item
 
-# 품목 복사 엔드포인트
-@router.post("/{item_id}/copy", response_model=schemas.UnifiedInventoryInDB)
-def copy_inventory_item(
-    item_id: int,
-    new_item_code: str = Query(..., description="새 품목 코드"),
-    copy_receipts: bool = Query(default=False, description="수령 이력 복사 여부"),
-    db: Session = Depends(get_db)
-):
-    """품목 복사"""
-    source_item = crud.inventory.get(db=db, id=item_id)
-    if not source_item:
-        raise HTTPException(status_code=404, detail="원본 품목을 찾을 수 없습니다.")
-    
-    # 품목 코드 중복 확인
-    existing_item = crud.inventory.get_by_item_code(db=db, item_code=new_item_code)
-    if existing_item:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"품목 코드 '{new_item_code}'가 이미 존재합니다."
-        )
-    
-    copied_item = crud.inventory.copy_item(
-        db=db, 
-        source_item_id=item_id, 
-        new_item_code=new_item_code,
-        copy_receipts=copy_receipts
-    )
-    
-    return copied_item
-
-# 품목 병합 엔드포인트
-@router.post("/merge", response_model=schemas.UnifiedInventoryInDB)
-def merge_inventory_items(
-    merge_data: schemas.InventoryMergeRequest,
-    db: Session = Depends(get_db)
-):
-    """품목 병합"""
-    # 모든 품목 존재 확인
-    items = []
-    for item_id in merge_data.source_item_ids:
-        item = crud.inventory.get(db=db, id=item_id)
-        if not item:
-            raise HTTPException(status_code=404, detail=f"품목 ID {item_id}를 찾을 수 없습니다.")
-        items.append(item)
-    
-    target_item = crud.inventory.get(db=db, id=merge_data.target_item_id)
-    if not target_item:
-        raise HTTPException(status_code=404, detail="대상 품목을 찾을 수 없습니다.")
-    
-    # 품목 병합 실행
-    merged_item = crud.inventory.merge_items(
-        db=db, 
-        merge_data=merge_data
-    )
-    
-    return merged_item

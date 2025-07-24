@@ -16,6 +16,9 @@ import InventoryFilters from './InventoryFilters';
 import InventoryForm from './InventoryForm';
 import ReceiptModal from './ReceiptModal'; // 새로 만들 컴포넌트
 
+import { inventoryApi } from '../../services/api'; // API 서비스
+
+
 // Services
 import api from '../../services/api';
 
@@ -716,7 +719,7 @@ const InventoryPage: React.FC = () => {
       `}</style>
 
       {/* 🔥 새로운 수령완료 모달 (이미지 포함) */}
-      <ReceiptWithImagesModal
+      <ReceiptModal
         item={selectedItemForReceipt}
         isOpen={isReceiptWithImagesModalOpen}
         onClose={() => {

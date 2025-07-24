@@ -776,57 +776,132 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
 
   // 4. 실제 수령완료 처리 함수
   // 🔥 개선된 구매완료 처리 함수
-const confirmReceiptComplete = async () => {
-  if (!confirmingItem) return;
-  
-  try {
-    console.log('🚀 구매 완료 처리 시작:', confirmingItem);
+  const confirmReceiptComplete = async () => {
+    if (!confirmingItem) return;
     
-    // 개선된 API 호출 - 전용 엔드포인트 사용
-    const completionResult = await purchaseApi.completePurchase(confirmingItem.id, {
-      received_quantity: confirmingItem.quantity,
-      receiver_name: confirmingItem.requester_name,
-      receiver_email: confirmingItem.requester_email,
-      location: '창고',
-      condition: 'good',
-      notes: `구매요청 #${confirmingItem.id}에서 자동 완료 처리`,
-      completed_by: '현재사용자',
-      received_date: new Date().toISOString()
-    });
+    try {
+      console.log('🚀 구매 완료 처리 시작:', confirmingItem);
+      
+      // 완료 데이터 준비
+      const completionData = {
+        received_quantity: Number(confirmingItem.quantity) || 1,
+        receiver_name: confirmingItem.requester_name || '시스템',
+        receiver_email: confirmingItem.requester_email || '',
+        location: '창고',
+        warehouse: '메인창고',
+        condition: 'good',
+        notes: `구매요청 #${confirmingItem.id}에서 자동 완료 처리`,
+        completed_by: '현재사용자',
+        received_date: new Date().toISOString(),
+        unit_price: Number(confirmingItem.estimated_unit_price) || 0,
+        specifications: confirmingItem.specifications || '',
+        supplier_name: confirmingItem.preferred_supplier || ''
+      };
 
-    console.log('✅ 구매 완료 처리 성공:', completionResult);
+      console.log('📤 전송 데이터:', completionData);
+      
+      // API 호출
+      const completionResult = await purchaseApi.completePurchase(confirmingItem.id, completionData);
+      console.log('✅ API 응답:', completionResult);
+      
+      // 성공 처리
+      if (completionResult?.success) {
+        const successMessage = completionResult.inventory_item_code 
+          ? `🎉 구매가 완료되어 품목관리에 등록되었습니다!\n품목코드: ${completionResult.inventory_item_code}`
+          : '🎉 구매가 완료되어 품목관리에 등록되었습니다!';
+        
+        toast.success(successMessage, { 
+          autoClose: 5000,
+          position: 'top-center'
+        });
+        
+        // 쿼리 새로고침
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['purchase-requests'] }),
+          queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] }),
+          queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+          queryClient.invalidateQueries({ queryKey: ['inventory-stats'] })
+        ]);
+        
+        setConfirmingItem(null);
+        
+        // 페이지 이동
+        if (completionResult.inventory_item_id) {
+          setTimeout(() => {
+            navigate(`/inventory?highlight=${completionResult.inventory_item_id}`);
+          }, 1500);
+        }
+        
+      } else {
+        throw new Error(completionResult?.message || '구매완료 처리에 실패했습니다.');
+      }
+      
+    } catch (error) {
+      console.error('❌ 구매완료 처리 실패:', error);
+      
+      // 에러 메시지 추출
+      let errorMessage = '구매완료 처리 중 오류가 발생했습니다.';
+      
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage, {
+        autoClose: 7000,
+        position: 'top-center'
+      });
+    }
+  };
+  // API 호출 함수도 개선 (api.ts에 추가)
+  completePurchase: async (requestId: number, completionData: any) => {
+    console.log(`📡 구매완료 API 호출: /purchase-requests/${requestId}/complete`);
+    console.log('📤 요청 데이터:', completionData);
     
-    // 성공 메시지
-    toast.success(
-      `🎉 구매가 완료되어 품목관리에 등록되었습니다!\n품목코드: ${completionResult.inventory_item_code}`,
-      { autoClose: 5000 }
-    );
-    
-    // 쿼리 새로고침
-    queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-    queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-    queryClient.invalidateQueries({ queryKey: ['inventory'] });
-    queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
-    
-    setConfirmingItem(null);
-    
-    // 품목관리 페이지로 이동 (생성된 품목으로 직접 이동)
-    setTimeout(() => {
-      navigate(`/inventory?highlight=${completionResult.inventory_item_id}`);
-    }, 1500);
-    
-  } catch (error: any) {
-    console.error('❌ 구매완료 처리 실패:', error);
-    
-    // 더 자세한 에러 메시지
-    const errorMessage = error.response?.data?.detail || 
-                        error.response?.data?.message || 
-                        error.message || 
-                        '구매완료 처리 중 오류가 발생했습니다.';
-    
-    toast.error(`구매완료 처리 실패: ${errorMessage}`);
+    try {
+      const response = await api.post(`/purchase-requests/${requestId}/complete`, completionData);
+      console.log('📥 응답 데이터:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('❌ API 호출 실패:', error);
+      
+      // 상세 에러 로깅
+      if (error.response) {
+        console.error('응답 상태:', error.response.status);
+        console.error('응답 데이터:', error.response.data);
+      }
+      
+      throw error;
+    }
   }
-};
+  // 추가: 백업 구매완료 처리 함수 (API 실패 시 대안)
+  const fallbackReceiptComplete = async (item: PurchaseRequest) => {
+    try {
+      console.log('🔄 백업 구매완료 처리 시작');
+      
+      // 1. 구매 요청 상태만 업데이트
+      await purchaseApi.updateRequest(item.id, { 
+        status: 'COMPLETED',
+        completed_date: new Date().toISOString(),
+        completed_by: '현재사용자'
+      });
+      
+      toast.success('구매 요청이 완료 처리되었습니다. (품목 등록은 수동으로 진행해주세요)');
+      
+      // 쿼리 새로고침
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      
+      setConfirmingItem(null);
+      
+    } catch (error) {
+      console.error('백업 처리도 실패:', error);
+      toast.error('구매완료 처리에 실패했습니다. 관리자에게 문의하세요.');
+    }
+  };
 //   const confirmReceiptComplete = async () => {
 //   if (!confirmingItem) return;
   
@@ -988,7 +1063,7 @@ const confirmReceiptComplete = async () => {
             <Clock size={24} />
             <span>승인 대기</span>
           </div>
-          <div className="stat-value">{stats.pending.toLocaleString()}</div>
+          <div className="stat-value">{stats.pending?.toLocaleString() || '0'}</div>
           <div className="stat-label">처리 대기중</div>
         </StatCard>
 
