@@ -493,6 +493,55 @@ export const purchaseApi = {
       throw error;
     }
   },
+  // 🔥 새로 추가: 구매 요청 완료 처리
+  completePurchase: async (requestId: number, completionData: {
+    received_quantity?: number;
+    receiver_name?: string;
+    receiver_email?: string;
+    location?: string;
+    condition?: string;
+    notes?: string;
+    completed_by?: string;
+    received_date?: string;
+  }): Promise<{
+    success: boolean;
+    message: string;
+    purchase_request_id: number;
+    inventory_item_id: number;
+    inventory_item_code: string;
+    redirect_url: string;
+  }> => {
+    try {
+      const response = await apiRequest.post(`/purchase-requests/${requestId}/complete`, completionData);
+      return response;
+    } catch (error) {
+      console.error('구매 완료 처리 실패:', error);
+      throw error;
+    }
+  },
+
+  // 구매 요청에서 품목 직접 생성 (기존 있지만 개선)
+  createInventoryFromPurchase: async (requestId: number, inventoryData: {
+    received_quantity: number;
+    receiver_name: string;
+    receiver_email?: string;
+    department: string;
+    received_date: string;
+    location?: string;
+    condition?: string;
+    notes?: string;
+  }): Promise<any> => {
+    try {
+      const response = await apiRequest.post('/inventory/from-purchase-request', {
+        purchase_request_id: requestId,
+        ...inventoryData
+      });
+      return response;
+    } catch (error) {
+      console.error('구매 요청에서 품목 생성 실패:', error);
+      throw error;
+    }
+  },
 };
 
 // Unified Inventory API - 새로운 통합 재고 관리
@@ -902,6 +951,78 @@ export const inventoryApi = {
       return response;
     } catch (error) {
       console.error('대시보드 데이터 조회 실패:', error);
+      throw error;
+    }
+  },
+  // 🔥 새로 추가: 수령 완료 처리 (이미지 포함)
+  completeReceiptWithImages: async (itemId: number, receiptData: {
+    receipt_number?: string;
+    received_quantity: number;
+    receiver_name: string;
+    receiver_email?: string;
+    department: string;
+    received_date: string;
+    location?: string;
+    condition?: string;
+    notes?: string;
+  }, images?: File[]): Promise<any> => {
+    try {
+      // 1. 수령 이력 먼저 추가
+      const receipt = await apiRequest.post(`/inventory/${itemId}/receipts`, receiptData);
+      
+      // 2. 이미지가 있으면 업로드
+      if (images && images.length > 0) {
+        const uploadPromises = images.map(async (file, index) => {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('image_type', 'receipt');
+          
+          return api.post(`/inventory/${itemId}/images`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+        });
+        
+        const imageResults = await Promise.allSettled(uploadPromises);
+        const successfulUploads = imageResults
+          .filter(result => result.status === 'fulfilled')
+          .map(result => (result as PromiseFulfilledResult<any>).value.data);
+        
+        console.log(`${successfulUploads.length}개 이미지 업로드 완료`);
+      }
+      
+      return receipt;
+    } catch (error) {
+      console.error('수령 완료 처리 실패:', error);
+      throw error;
+    }
+  },
+
+  // 이미지와 함께 품목 업데이트
+  updateItemWithImages: async (itemId: number, itemData: any, images?: File[]): Promise<any> => {
+    try {
+      // 1. 품목 정보 업데이트
+      const updatedItem = await apiRequest.put(`/inventory/${itemId}`, itemData);
+      
+      // 2. 이미지 업로드
+      if (images && images.length > 0) {
+        for (const file of images) {
+          const formData = new FormData();
+          formData.append('file', file);
+          formData.append('image_type', 'general');
+          
+          await api.post(`/inventory/${itemId}/images`, formData, {
+            headers: {
+              'Content-Type': 'multipart/form-data',
+            },
+          });
+        }
+      }
+      
+      return updatedItem;
+    } catch (error) {
+      console.error('품목 업데이트 실패:', error);
       throw error;
     }
   },

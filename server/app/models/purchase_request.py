@@ -1,6 +1,7 @@
 # server/app/models/purchase_request.py
-from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, Enum
+from sqlalchemy import Column, Integer, String, Text, Float, DateTime, Boolean, Enum, ForeignKey
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 from enum import Enum as PyEnum
 from app.core.database import Base
 from app.enums import RequestStatus, UrgencyLevel, ItemCategory, PurchaseMethod
@@ -77,23 +78,32 @@ class PurchaseRequest(Base):
     estimated_approval_time = Column(Integer)  # 예상 승인 소요시간 (시간)
     actual_approval_time = Column(Integer)     # 실제 승인 소요시간 (시간)
     
+    # 🔥 새로 추가: 완료 처리 관련 필드들
+    completed_date = Column(DateTime(timezone=True), nullable=True)
+    completed_by = Column(String(100), nullable=True)
+    completion_notes = Column(Text, nullable=True)
+    inventory_item_id = Column(Integer, ForeignKey("unified_inventory.id"), nullable=True)  # 연결된 품목 ID
+    
+    # 관계 설정 추가
+    inventory_item = relationship("UnifiedInventory", back_populates="purchase_request")
+    
     def __repr__(self):
         return f"<PurchaseRequest {self.request_number}: {self.item_name}>"
 
     @property
     def is_editable(self):
         """수정 가능한 상태인지 확인"""
-        return self.status in [RequestStatus.DRAFT, RequestStatus.SUBMITTED, RequestStatus.REJECTED]
+        return self.status in [RequestStatus.SUBMITTED, RequestStatus.SUBMITTED, RequestStatus.REJECTED]
     
     @property
     def is_approvable(self):
         """승인 가능한 상태인지 확인"""
-        return self.status == RequestStatus.PENDING_APPROVAL
+        return self.status == RequestStatus.SUBMITTED
     
     @property
     def is_deletable(self):
         """삭제 가능한 상태인지 확인"""
-        return self.status in [RequestStatus.DRAFT, RequestStatus.SUBMITTED, RequestStatus.REJECTED]
+        return self.status in [RequestStatus.SUBMITTED, RequestStatus.SUBMITTED, RequestStatus.REJECTED]
     
     def generate_request_number(self):
         """요청번호 자동 생성"""

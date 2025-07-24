@@ -1,7 +1,7 @@
 # server/app/schemas/purchase_request.py
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field, ConfigDict, validator
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 from app.enums import RequestStatus, UrgencyLevel, ItemCategory, PurchaseMethod  # 공유 Enum 사용
 
 # 기본 스키마
@@ -38,16 +38,20 @@ class PurchaseRequestBase(BaseModel):
     business_case: Optional[str] = Field(None, description="비즈니스 케이스")
     notes: Optional[str] = Field(None, description="비고")
 
-    @validator('total_budget', pre=True)
-    def calculate_total_budget(cls, v, values):
-        if 'quantity' in values and 'estimated_unit_price' in values:
-            if values.get('estimated_unit_price', 0) > 0:
-                return values['quantity'] * values['estimated_unit_price']
-        return v
+    @field_validator('total_budget', mode='before')
+    @classmethod
+    def calculate_total_budget(cls, v, info):
+        if info.data:
+            quantity = info.data.get('quantity', 1)
+            estimated_unit_price = info.data.get('estimated_unit_price', 0)
+            if estimated_unit_price and estimated_unit_price > 0:
+                return quantity * estimated_unit_price
+        return v or 0.0
+
 
 # 생성용 스키마
 class PurchaseRequestCreate(PurchaseRequestBase):
-    status: Optional[RequestStatus] = Field(default=RequestStatus.DRAFT, description="상태")
+    status: Optional[RequestStatus] = Field(default=RequestStatus.SUBMITTED, description="상태")
 
 # 업데이트용 스키마
 class PurchaseRequestUpdate(BaseModel):
@@ -136,13 +140,14 @@ class PurchaseRequestStats(BaseModel):
     pending: int
     approved: int
     rejected: int
-    this_month: int = Field(alias="thisMonth")  # alias 추가
-    total_budget: float = Field(alias="totalBudget")  # alias 추가
-    average_approval_time: Optional[float] = Field(None, alias="averageProcessingTime")  # alias 추가
+    this_month: int
+    total_budget: float
+    average_approval_time: Optional[float] = None
     
-    class Config:
-        populate_by_name = True  # alias와 원래 이름 모두 허용
-        allow_population_by_field_name = True
+    model_config = ConfigDict(
+        from_attributes=True,
+        populate_by_name=True
+    )
 
 # 검색 필터
 class PurchaseRequestFilter(BaseModel):

@@ -775,89 +775,141 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
   };
 
   // 4. 실제 수령완료 처리 함수
-  const confirmReceiptComplete = async () => {
+  // 🔥 개선된 구매완료 처리 함수
+const confirmReceiptComplete = async () => {
   if (!confirmingItem) return;
   
   try {
-    // 1. 🔥 구매 요청 데이터를 품목관리용 데이터로 변환
-    const inventoryData = {
-      item_code: `ITM-${Date.now()}`,
-      item_name: confirmingItem.item_name || '품목명 없음',
-      category: confirmingItem.category || 'OTHER',
-      description: confirmingItem.specifications || '',
-      current_stock: Number(confirmingItem.quantity) || 0,
-      minimum_stock: Math.max(1, Math.ceil((Number(confirmingItem.quantity) || 0) * 0.2)),
-      maximum_stock: (Number(confirmingItem.quantity) || 0) * 2,
-      unit: confirmingItem.unit || '개',
-      unit_price: Number(confirmingItem.estimated_unit_price) || 0,
-      currency: confirmingItem.currency || 'KRW',
-      supplier_name: confirmingItem.preferred_supplier || '',
+    console.log('🚀 구매 완료 처리 시작:', confirmingItem);
+    
+    // 개선된 API 호출 - 전용 엔드포인트 사용
+    const completionResult = await purchaseApi.completePurchase(confirmingItem.id, {
+      received_quantity: confirmingItem.quantity,
+      receiver_name: confirmingItem.requester_name,
+      receiver_email: confirmingItem.requester_email,
       location: '창고',
-      warehouse: '메인창고',
-      purchase_request_id: confirmingItem.id,
-      notes: `구매요청 #${confirmingItem.id}에서 자동 생성됨`,
-      is_active: true
-    };
-
-    // 2. 품목 추가 (에러가 나도 계속 진행)
-    try {
-      const inventoryResponse = await fetch('http://localhost:8000/api/v1/inventory/', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(inventoryData)
-      });
-
-      if (inventoryResponse.ok) {
-        const inventoryResult = await inventoryResponse.json();
-        console.log('품목 추가 성공:', inventoryResult);
-        toast.success('품목이 재고관리에 추가되었습니다!');
-      } else {
-        console.warn('품목 추가 실패, 상태 업데이트는 계속 진행');
-      }
-    } catch (inventoryError) {
-      console.warn('품목 추가 실패:', inventoryError);
-      toast.warning('품목 추가 중 문제가 있었지만 구매는 완료됩니다.');
-    }
-
-    // 3. 구매 요청 상태를 'COMPLETED'로 업데이트
-    await purchaseApi.updateRequest(confirmingItem.id, { 
-      status: 'COMPLETED',
-      completed_date: new Date().toISOString(),
-      completed_by: '현재사용자' // 실제로는 로그인한 사용자 정보
+      condition: 'good',
+      notes: `구매요청 #${confirmingItem.id}에서 자동 완료 처리`,
+      completed_by: '현재사용자',
+      received_date: new Date().toISOString()
     });
 
-    toast.success('🎉 구매가 완료되어 품목관리에 등록되었습니다!');
+    console.log('✅ 구매 완료 처리 성공:', completionResult);
     
-    // 4. 쿼리 새로고침 (에러 방지)
-    try {
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
-    } catch (queryError) {
-      console.warn('쿼리 새로고침 실패:', queryError);
-    }
+    // 성공 메시지
+    toast.success(
+      `🎉 구매가 완료되어 품목관리에 등록되었습니다!\n품목코드: ${completionResult.inventory_item_code}`,
+      { autoClose: 5000 }
+    );
+    
+    // 쿼리 새로고침
+    queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+    queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory'] });
+    queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+    
     setConfirmingItem(null);
     
-    // 5. 1.5초 후 품목관리 페이지로 이동
-    // 5. 안전한 페이지 이동
-    try {
-      setTimeout(() => {
-        navigate('/inventory');
-      }, 1000); // 시간을 줄여서 더 빠르게
-    } catch (navigationError) {
-      console.error('페이지 이동 실패:', navigationError);
-      // 수동으로 이동
-      window.location.href = '/inventory';
-    }
+    // 품목관리 페이지로 이동 (생성된 품목으로 직접 이동)
+    setTimeout(() => {
+      navigate(`/inventory?highlight=${completionResult.inventory_item_id}`);
+    }, 1500);
     
   } catch (error: any) {
-    console.error('구매완료 처리 실패:', error);
-    toast.error(error.response?.data?.message || '구매완료 처리 중 오류가 발생했습니다.');
+    console.error('❌ 구매완료 처리 실패:', error);
+    
+    // 더 자세한 에러 메시지
+    const errorMessage = error.response?.data?.detail || 
+                        error.response?.data?.message || 
+                        error.message || 
+                        '구매완료 처리 중 오류가 발생했습니다.';
+    
+    toast.error(`구매완료 처리 실패: ${errorMessage}`);
   }
 };
+//   const confirmReceiptComplete = async () => {
+//   if (!confirmingItem) return;
+  
+//   try {
+//     // 1. 🔥 구매 요청 데이터를 품목관리용 데이터로 변환
+//     const inventoryData = {
+//       item_code: `ITM-${Date.now()}`,
+//       item_name: confirmingItem.item_name || '품목명 없음',
+//       category: confirmingItem.category || 'OTHER',
+//       description: confirmingItem.specifications || '',
+//       current_stock: Number(confirmingItem.quantity) || 0,
+//       minimum_stock: Math.max(1, Math.ceil((Number(confirmingItem.quantity) || 0) * 0.2)),
+//       maximum_stock: (Number(confirmingItem.quantity) || 0) * 2,
+//       unit: confirmingItem.unit || '개',
+//       unit_price: Number(confirmingItem.estimated_unit_price) || 0,
+//       currency: confirmingItem.currency || 'KRW',
+//       supplier_name: confirmingItem.preferred_supplier || '',
+//       location: '창고',
+//       warehouse: '메인창고',
+//       purchase_request_id: confirmingItem.id,
+//       notes: `구매요청 #${confirmingItem.id}에서 자동 생성됨`,
+//       is_active: true
+//     };
+
+//     // 2. 품목 추가 (에러가 나도 계속 진행)
+//     try {
+//       const inventoryResponse = await fetch('http://localhost:8000/api/v1/inventory/', {
+//         method: 'POST',
+//         headers: {
+//           'Content-Type': 'application/json',
+//         },
+//         body: JSON.stringify(inventoryData)
+//       });
+
+//       if (inventoryResponse.ok) {
+//         const inventoryResult = await inventoryResponse.json();
+//         console.log('품목 추가 성공:', inventoryResult);
+//         toast.success('품목이 재고관리에 추가되었습니다!');
+//       } else {
+//         console.warn('품목 추가 실패, 상태 업데이트는 계속 진행');
+//       }
+//     } catch (inventoryError) {
+//       console.warn('품목 추가 실패:', inventoryError);
+//       toast.warning('품목 추가 중 문제가 있었지만 구매는 완료됩니다.');
+//     }
+
+//     // 3. 구매 요청 상태를 'COMPLETED'로 업데이트
+//     await purchaseApi.updateRequest(confirmingItem.id, { 
+//       status: 'COMPLETED',
+//       completed_date: new Date().toISOString(),
+//       completed_by: '현재사용자' // 실제로는 로그인한 사용자 정보
+//     });
+
+//     toast.success('🎉 구매가 완료되어 품목관리에 등록되었습니다!');
+    
+//     // 4. 쿼리 새로고침 (에러 방지)
+//     try {
+//       queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+//       queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+//       queryClient.invalidateQueries({ queryKey: ['inventory'] });
+//       queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+//     } catch (queryError) {
+//       console.warn('쿼리 새로고침 실패:', queryError);
+//     }
+//     setConfirmingItem(null);
+    
+//     // 5. 1.5초 후 품목관리 페이지로 이동
+//     // 5. 안전한 페이지 이동
+//     try {
+//       setTimeout(() => {
+//         navigate('/inventory');
+//       }, 1000); // 시간을 줄여서 더 빠르게
+//     } catch (navigationError) {
+//       console.error('페이지 이동 실패:', navigationError);
+//       // 수동으로 이동
+//       window.location.href = '/inventory';
+//     }
+    
+//   } catch (error: any) {
+//     console.error('구매완료 처리 실패:', error);
+//     toast.error(error.response?.data?.message || '구매완료 처리 중 오류가 발생했습니다.');
+//   }
+// };
   // 5. 확인 다이얼로그 닫기
   const cancelReceiptComplete = () => {
     setConfirmingItem(null);
@@ -1090,7 +1142,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         />
       )}
       {/* 구매완료 확인 다이얼로그 */}
-      {confirmingItem && (
+      {/* {confirmingItem && (
         <ConfirmDialog onClick={cancelReceiptComplete}>
           <ConfirmContent onClick={(e) => e.stopPropagation()}>
             <div className="confirm-icon">
@@ -1149,6 +1201,76 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
               >
                 <CheckCircle2 size={18} />
                 구매완료
+              </Button>
+            </div>
+          </ConfirmContent>
+        </ConfirmDialog>
+      )} */}
+      {confirmingItem && (
+        <ConfirmDialog onClick={cancelReceiptComplete}>
+          <ConfirmContent onClick={(e) => e.stopPropagation()}>
+            <div className="confirm-icon">
+              <CheckCircle2 size={32} />
+            </div>
+            
+            <div className="confirm-title">구매완료 처리</div>
+            
+            <div className="confirm-message">
+              아래 구매 요청을 완료 처리하시겠습니까?
+            </div>
+            <div className="confirm-message" style={{ color: '#10b981', fontWeight: 'bold' }}>
+              ✨ 완료 후 자동으로 품목관리에 등록되고 해당 페이지로 이동합니다.
+            </div>
+            
+            <div className="item-info">
+              <div className="info-row">
+                <span className="label">품목명:</span>
+                <span className="value">{confirmingItem.item_name}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">수량:</span>
+                <span className="value">{confirmingItem.quantity} {confirmingItem.unit || '개'}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">요청자:</span>
+                <span className="value">{confirmingItem.requester_name}</span>
+              </div>
+              <div className="info-row">
+                <span className="label">부서:</span>
+                <span className="value">{confirmingItem.department}</span>
+              </div>
+              {confirmingItem.total_budget && (
+                <div className="info-row">
+                  <span className="label">예산:</span>
+                  <span className="value">{confirmingItem.total_budget.toLocaleString()}원</span>
+                </div>
+              )}
+              <div className="info-row">
+                <span className="label">생성될 품목코드:</span>
+                <span className="value" style={{ color: '#3b82f6' }}>
+                  ITM-{new Date().toISOString().split('T')[0].replace(/-/g, '')}-{confirmingItem.id.toString().padStart(4, '0')}
+                </span>
+              </div>
+            </div>
+            
+            <div className="button-group">
+              <Button 
+                variant="outline" 
+                onClick={cancelReceiptComplete}
+                size="lg"
+              >
+                취소
+              </Button>
+              <Button 
+                onClick={confirmReceiptComplete}
+                size="lg"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  border: 'none'
+                }}
+              >
+                <CheckCircle2 size={18} />
+                구매완료 & 품목등록
               </Button>
             </div>
           </ConfirmContent>

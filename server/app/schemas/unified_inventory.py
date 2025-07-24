@@ -136,7 +136,29 @@ class UnifiedInventoryInDB(UnifiedInventoryBase):
     is_low_stock: bool = Field(description="재고 부족 여부")
     stock_status: str = Field(description="재고 상태")
     model_config = ConfigDict(from_attributes=True)
+    
+# InventoryUsageLogBase 클래스 정의 추가 (누락된 것 같음)
+class InventoryUsageLogBase(BaseModel):
+    """사용 로그 기본 스키마"""
+    item_id: int = Field(..., description="품목 ID")
+    usage_type: str = Field(..., max_length=50, description="사용 유형 (출고/반납/소모/폐기)")
+    quantity: int = Field(..., ge=1, description="수량")
+    used_by: str = Field(..., max_length=100, description="사용자")
+    department: str = Field(..., max_length=100, description="부서")
+    purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
+    location: Optional[str] = Field(None, max_length=100, description="사용 장소")
+    notes: Optional[str] = Field(None, description="비고")
+    used_date: datetime = Field(..., description="사용일")
 
+
+class InventoryUsageLogInDB(InventoryUsageLogBase):
+    """DB용 사용 로그 스키마"""
+    id: int
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+    is_active: bool = True
+    
+    model_config = ConfigDict(from_attributes=True)
 
 # 사용 이력 스키마
 class InventoryUsageLogInDB(InventoryUsageLogBase):
@@ -343,7 +365,7 @@ class QRCodeGenerate(BaseModel):
 class QRCodeResponse(BaseModel):
     qr_code_url: str
     qr_code_data: str
-    expiry_date: Optional[datetime] = NoneBase(BaseModel):
+    expiry_date: Optional[datetime] = None
     usage_type: str = Field(..., description="사용 유형")  # 'consumption', 'return', 'transfer', 'disposal'
     quantity: int = Field(..., ge=1, description="수량")
     unit: str = Field(default="개", description="단위")
@@ -379,3 +401,4 @@ class InventoryUsageLogUpdate(BaseModel):
     
     expected_return_date: Optional[datetime] = Field(None, description="예상 반납일")
     notes: Optional[str] = Field(None, description="비고")
+    
