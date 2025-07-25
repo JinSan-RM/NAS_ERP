@@ -26,6 +26,11 @@ class PurchaseRequest(Base):
     requester_email = Column(String, nullable=False)
     department = Column(String, nullable=False)
     position = Column(String, nullable=True)
+    justification = Column(Text, nullable=True)
+    status = Column(String, nullable=False, default='SUBMITTED')
+    request_date = Column(DateTime, default=func.now())
+    required_by_date = Column(DateTime, nullable=True)  # 추가
+    expected_delivery_date = Column(DateTime, nullable=True)
     # 관계 설정
     # inventory_item = relationship("UnifiedInventory", back_populates="purchase_requests")
     

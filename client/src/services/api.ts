@@ -78,7 +78,6 @@ export interface PurchaseRequest {
   supplier_contact?: string;
   request_date: string;
   expected_delivery_date?: string;
-  required_by_date?: string;
   status: string;
   approval_level?: number;
   current_approver?: string;
@@ -157,7 +156,6 @@ export interface PurchaseRequestFormData {
   preferred_supplier?: string;
   supplier_contact?: string;
   expected_delivery_date?: string;
-  required_by_date?: string;
   justification: string;
   business_case?: string;
   notes?: string;

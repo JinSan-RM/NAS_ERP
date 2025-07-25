@@ -301,9 +301,30 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     }
 
     // 백엔드 API에 맞는 데이터 형식으로 변환
+    // const submitData = {
+    //   item_name: formData.itemName,
+    //   specifications: formData.specifications,
+    //   quantity: Number(formData.quantity),
+    //   unit: '개',
+    //   estimated_unit_price: Number(formData.estimatedPrice),
+    //   total_budget: Number(formData.quantity) * Number(formData.estimatedPrice),
+    //   currency: 'KRW',
+    //   category: formData.category,
+    //   urgency: formData.urgency,
+    //   purchase_method: formData.purchaseMethod,
+    //   requester_name: '현재사용자',
+    //   department: formData.department,
+    //   expected_delivery_date: formData.expectedDeliveryDate ? new Date(`${formData.expectedDeliveryDate}T00:00:00`).toISOString() : undefined,
+    //   justification: formData.justification,
+    //   preferred_supplier: formData.preferredSupplier,
+    //   project: formData.project,
+    //   budget_code: formData.budgetCode,
+    //   status: 'SUBMITTED', // 기본 상태는 '요청됨'
+    // };
+
     const submitData = {
       item_name: formData.itemName,
-      specifications: formData.specifications,
+      specifications: formData.specifications || null,
       quantity: Number(formData.quantity),
       unit: '개',
       estimated_unit_price: Number(formData.estimatedPrice),
@@ -311,21 +332,22 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
       currency: 'KRW',
       category: formData.category,
       urgency: formData.urgency,
-      purchase_method: formData.purchaseMethod,
+      purchase_method: formData.purchaseMethod || 'DIRECT',
       requester_name: '현재사용자',
+      requester_email: "current_user@company.com",
       department: formData.department,
-      expected_delivery_date: formData.expectedDeliveryDate ? new Date(`${formData.expectedDeliveryDate}T00:00:00`).toISOString() : undefined,
+      position: null,
       justification: formData.justification,
-      preferred_supplier: formData.preferredSupplier,
-      project: formData.project,
-      budget_code: formData.budgetCode,
-      statusbar: 'SUBMITTED', // 기본 상태는 '요청됨'
+      expected_delivery_date: formData.expectedDeliveryDate || null,
     };
-
-    console.log('=== 전송할 데이터 ===');
-    console.log('submitData:', submitData);
-    console.log('isEdit:', isEdit);
-    console.log('initialData?.id:', initialData?.id);
+    console.log('submitData:', JSON.stringify(submitData, null, 2));
+  
+    // 필수 필드 체크
+    const requiredFields = ['item_name', 'quantity', 'requester_name', 'department', 'justification'];
+    const missingFields = requiredFields.filter(field => !submitData[field]);
+    if (missingFields.length > 0) {
+      console.error('누락된 필수 필드:', missingFields);
+    }
 
     // 수정 모드면 업데이트, 아니면 생성
     if (isEdit && initialData?.id) {

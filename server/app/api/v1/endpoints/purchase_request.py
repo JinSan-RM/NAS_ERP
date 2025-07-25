@@ -8,7 +8,9 @@ from io import BytesIO
 from datetime import datetime
 from pydantic import BaseModel
 
-from app import crud, schemas
+from app.api import deps
+from app.core.database import get_db
+import app.crud.purchase_request as crud
 from app.api.deps import get_db
 from app.enums import RequestStatus, UrgencyLevel  # 공유 Enum 사용
 from app.schemas.purchase_request import (
@@ -20,6 +22,9 @@ from app.schemas.purchase_request import (
     PurchaseRequestFilter,
     PurchaseRequestResponse,
 )
+
+from app.models.purchase_request import PurchaseRequest as DBPurchaseRequest
+
 
 router = APIRouter()
 
@@ -72,39 +77,109 @@ def read_purchase_requests(
         "size": limit,
         "pages": (total + limit - 1) // limit if total > 0 else 0
     }
-    
-@router.post("/", response_model=PurchaseRequest)
+  
+@router.post("/", response_model=PurchaseRequestResponse)
 def create_purchase_request(
     *,
     db: Session = Depends(get_db),
     request_in: PurchaseRequestCreate
 ):
-    """
-    새 구매 요청 생성
-    """
     try:
-        # request_number 자동 생성 추가
-        if not hasattr(request_in, 'request_number') or not request_in.request_number:
-            from datetime import datetime
-            now = datetime.now()
-            # PR + 년월 + 마이크로초 형태로 고유번호 생성
-            request_number = f"PR{now.strftime('%Y%m')}{now.microsecond:06d}"
-            
-            # request_in에 request_number 추가
-            request_data = request_in.dict()
-            request_data['request_number'] = request_number
-            
-            # 새로운 PurchaseRequestCreate 객체 생성
-            from app.schemas.purchase_request import PurchaseRequestCreate
-            request_in = PurchaseRequestCreate(**request_data)
+        from datetime import datetime
+        now = datetime.now()
         
-        purchase_request = crud.purchase_request.create(db=db, obj_in=request_in)
-        return purchase_request
+        request_data = request_in.dict()
+        
+        create_data = {
+            'request_number': f"PR{now.strftime('%Y%m')}{now.microsecond:06d}",
+            'item_name': request_data.get('item_name'),
+            'specifications': request_data.get('specifications'),
+            'quantity': request_data.get('quantity'),
+            'unit': request_data.get('unit', '개'),
+            'estimated_unit_price': request_data.get('estimated_unit_price'),
+            'total_budget': request_data.get('total_budget'),
+            'currency': request_data.get('currency', 'KRW'),
+            'category': request_data.get('category'),
+            'urgency': request_data.get('urgency'),
+            'purchase_method': request_data.get('purchase_method'),
+            'requester_name': request_data.get('requester_name'),
+            'requester_email': request_data.get('requester_email'),
+            'department': request_data.get('department'),
+            'position': request_data.get('position'),
+            'justification': request_data.get('justification', ''),
+            'status': 'SUBMITTED',
+            'request_date': datetime.now()
+        }
+        purchase_request = DBPurchaseRequest(**create_data)
+        db.add(purchase_request)
+        db.commit()
+        db.refresh(purchase_request)
+        
+        # ✅ PurchaseRequestResponse 스키마로 응답
+        return PurchaseRequestResponse.from_orm(purchase_request)
+        
     except Exception as e:
+        db.rollback()
         raise HTTPException(
             status_code=400,
             detail=f"구매 요청 생성에 실패했습니다: {str(e)}"
         )
+        
+        
+# @router.post("/", response_model=PurchaseRequest)
+# def create_purchase_request(
+#     *,
+#     db: Session = Depends(get_db),
+#     request_in: PurchaseRequestCreate
+# ):
+#     """
+#     새 구매 요청 생성
+#     """
+#     try:
+#         # request_in을 dict로 변환
+#         request_data = request_in.dict()
+        
+#         # request_number 자동 생성
+#         from datetime import datetime
+#         now = datetime.now()
+#         request_number = f"PR{now.strftime('%Y%m')}{now.microsecond:06d}"
+#         request_data['request_number'] = request_number
+        
+#         # DB 모델에 실제로 존재하는 필드만 필터링
+#         allowed_fields = {
+#             'request_number', 'item_name', 'specifications', 'quantity',
+#             'unit', 'estimated_unit_price', 'total_budget', 'currency',
+#             'category', 'urgency', 'purchase_method', 'requester_name',
+#             'requester_email', 'department', 'position', 'phone_number',
+#             'project', 'budget_code', 'cost_center', 'preferred_supplier',
+#             'supplier_contact', 'request_date', 'expected_delivery_date',
+#             'required_by_date', 'status', 'approval_level', 'current_approver',
+#             'approved_date', 'approved_by', 'rejected_date', 'rejected_by',
+#             'rejection_reason', 'justification', 'business_case', 'notes',
+#             'attachment_urls', 'is_active', 'created_at', 'updated_at',
+#             'created_by', 'updated_by', 'priority_score', 'estimated_approval_time',
+#             'actual_approval_time'
+#         }
+#         # 허용된 필드만 추출하고 None 값 제거
+#         filtered_data = {
+#             k: v for k, v in request_data.items() 
+#             if k in allowed_fields and v is not None
+#         }
+        
+#         # CRUD를 통하지 않고 직접 DB 객체 생성
+#         purchase_request = PurchaseRequest(**filtered_data)
+#         db.add(purchase_request)
+#         db.commit()
+#         db.refresh(purchase_request)
+        
+#         return purchase_request
+        
+#     except Exception as e:
+#         db.rollback()
+#         raise HTTPException(
+#             status_code=400,
+#             detail=f"구매 요청 생성에 실패했습니다: {str(e)}"
+#         )
 
 @router.get("/stats", response_model=PurchaseRequestStats)
 def read_purchase_request_stats(db: Session = Depends(get_db)):

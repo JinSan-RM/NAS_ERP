@@ -11,36 +11,39 @@ class PurchaseRequestBase(BaseModel):
     quantity: int = Field(default=1, ge=1, description="수량")
     unit: str = Field(default="개", max_length=20, description="단위")
     estimated_unit_price: Optional[float] = Field(default=0.0, ge=0, description="예상 단가")
+    total_budget: Optional[float] = Field(None, description="총 예산")
     currency: str = Field(default="KRW", max_length=10, description="통화")
-    
-    category: Optional[str] = Field(None, description="카테고리")
-    urgency: UrgencyLevel = Field(default=UrgencyLevel.NORMAL, description="긴급도")
-    
+    category: str = Field(..., description="카테고리")
+    urgency: str = Field(..., description="긴급도")
+    purchase_method: Optional[str] = Field(None, description="구매 방법")
     requester_name: str = Field(..., max_length=100, description="요청자명")
-    requester_email: Optional[str] = Field(None, max_length=255, description="요청자 이메일")
     department: str = Field(..., max_length=100, description="부서")
-    phone_number: Optional[str] = Field(None, max_length=20, description="연락처")
-    
-    project: Optional[str] = Field(None, max_length=200, description="프로젝트")
-    budget_code: Optional[str] = Field(None, max_length=50, description="예산코드")
-    
-    preferred_supplier: Optional[str] = Field(None, max_length=200, description="선호 공급업체")
-    
-    justification: str = Field(..., description="구매 사유")
-    additional_notes: Optional[str] = Field(None, description="비고")
-    # 실제 DB에 없는 필드들은 기본값 제공
-    justification: Optional[str] = None
-    status: str = "SUBMITTED"  # 기본값
-    is_active: bool = True     # 기본값
-    created_at: Optional[datetime] = None
-    priority_score: Optional[float] = None
+    position: Optional[str] = Field(None, max_length=100, description="직책")
+    justification: Optional[str] = Field(None, description="구매 사유")
+    status: str = Field(default="SUBMITTED", description="상태")
     class Config:
         from_attributes = True
 
 
 # 생성용 스키마
-class PurchaseRequestCreate(PurchaseRequestBase):
-    pass
+class PurchaseRequestCreate(BaseModel):
+    item_name: str
+    specifications: Optional[str] = None
+    quantity: int
+    unit: Optional[str] = "개"
+    estimated_unit_price: Optional[float] = None
+    total_budget: Optional[float] = None
+    currency: Optional[str] = "KRW"
+    category: str
+    urgency: str
+    purchase_method: Optional[str] = None
+    requester_name: str
+    requester_email: Optional[str] = None
+    department: str
+    position: Optional[str] = None
+    justification: Optional[str] = None
+    expected_delivery_date: Optional[datetime] = None
+
 
 # 업데이트용 스키마
 class PurchaseRequestUpdate(BaseModel):
@@ -202,54 +205,54 @@ class PurchaseRequestResponse(BaseModel):
     def from_orm(cls, obj):
         """DB 객체에서 Response 스키마로 변환"""
         return cls(
-            # 실제 DB 필드들
+            # 실제 DB 필드들 (getattr 대신 직접 접근)
             id=obj.id,
-            request_number=getattr(obj, 'request_number', f"PR{obj.id:010d}"),
+            request_number=obj.request_number,
             item_name=obj.item_name,
-            specifications=getattr(obj, 'specifications', None),
+            specifications=obj.specifications,
             quantity=obj.quantity,
-            unit=getattr(obj, 'unit', '개'),
-            estimated_unit_price=getattr(obj, 'estimated_unit_price', None),
-            total_budget=getattr(obj, 'total_budget', None),
-            currency=getattr(obj, 'currency', 'KRW'),
-            category=getattr(obj, 'category', None),
+            unit=obj.unit,
+            estimated_unit_price=obj.estimated_unit_price,
+            total_budget=obj.total_budget,
+            currency=obj.currency,
+            category=obj.category,
             urgency=obj.urgency,
-            purchase_method=getattr(obj, 'purchase_method', None),
+            purchase_method=obj.purchase_method,
             requester_name=obj.requester_name,
-            requester_email=getattr(obj, 'requester_email', None),
+            requester_email=obj.requester_email,
             department=obj.department,
-            position=getattr(obj, 'position', None),
+            position=obj.position,
+            justification=getattr(obj, 'justification', ''),  # DB에 있는 필드
             
-            # FE가 요구하는 필드들 - 기본값 제공
-            phone_number=None,
-            project=None,
-            budget_code=None,
-            cost_center=None,
-            preferred_supplier=None,
-            supplier_contact=None,
-            request_date=datetime.now().isoformat(),
-            expected_delivery_date=None,
-            required_by_date=None,
-            status="SUBMITTED",
-            approval_level=None,
-            current_approver=None,
-            approved_date=None,
-            approved_by=None,
-            rejected_date=None,
-            rejected_by=None,
-            rejection_reason=None,
-            justification="",
-            business_case=None,
-            notes=None,
-            attachment_urls=None,
-            is_active=True,
-            created_at=datetime.now().isoformat(),
-            updated_at=None,
-            created_by=None,
-            updated_by=None,
-            priority_score=0,  # None 대신 0 사용
-            estimated_approval_time=0,
-            actual_approval_time=0
+            # DB에 있는 다른 필드들
+            phone_number=getattr(obj, 'phone_number', None),
+            project=getattr(obj, 'project', None),
+            budget_code=getattr(obj, 'budget_code', None),
+            cost_center=getattr(obj, 'cost_center', None),
+            preferred_supplier=getattr(obj, 'preferred_supplier', None),
+            supplier_contact=getattr(obj, 'supplier_contact', None),
+            request_date=obj.request_date.isoformat() if obj.request_date else datetime.now().isoformat(),
+            expected_delivery_date=obj.expected_delivery_date.isoformat() if obj.expected_delivery_date else None,
+            required_by_date=obj.required_by_date.isoformat() if obj.required_by_date else None,
+            status=obj.status,
+            approval_level=getattr(obj, 'approval_level', None),
+            current_approver=getattr(obj, 'current_approver', None),
+            approved_date=obj.approved_date.isoformat() if getattr(obj, 'approved_date', None) else None,
+            approved_by=getattr(obj, 'approved_by', None),
+            rejected_date=obj.rejected_date.isoformat() if getattr(obj, 'rejected_date', None) else None,
+            rejected_by=getattr(obj, 'rejected_by', None),
+            rejection_reason=getattr(obj, 'rejection_reason', None),
+            business_case=getattr(obj, 'business_case', None),
+            notes=getattr(obj, 'notes', None),
+            attachment_urls=getattr(obj, 'attachment_urls', None),
+            is_active=obj.is_active,
+            created_at=obj.created_at.isoformat() if obj.created_at else datetime.now().isoformat(),
+            updated_at=obj.updated_at.isoformat() if getattr(obj, 'updated_at', None) else None,
+            created_by=getattr(obj, 'created_by', None),
+            updated_by=getattr(obj, 'updated_by', None),
+            priority_score=float(obj.priority_score) if obj.priority_score else 0.0,
+            estimated_approval_time=getattr(obj, 'estimated_approval_time', 0) or 0,
+            actual_approval_time=getattr(obj, 'actual_approval_time', 0) or 0
         )
 
     class Config:

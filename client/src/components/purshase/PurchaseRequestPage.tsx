@@ -50,6 +50,7 @@ interface PurchaseRequest {
   estimatedPrice?: number;
   supplier?: string;
   notes?: string;
+  inventory_item_id?: number;
 }
 
 interface TableColumn<T> {
@@ -569,6 +570,93 @@ const PurchaseRequestPage: React.FC = () => {
       toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
     },
   });
+  const completePurchaseMutation = useMutation({
+    mutationFn: async ({ requestId, completionData }: { 
+      requestId: number; 
+      completionData: any 
+    }) => {
+      console.log('🚀 구매완료 처리 시작:', { requestId, completionData });
+      
+      const result = await purchaseApi.completePurchase(requestId, completionData);
+      console.log('✅ API 응답:', result);
+      
+      return result;
+    },
+    onSuccess: (result, variables) => {
+      console.log('🎉 구매완료 처리 성공:', result);
+      
+      // 즉시 상태 업데이트
+      queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
+        if (!oldData?.data?.items) return oldData;
+        
+        return {
+          ...oldData,
+          data: {
+            ...oldData.data,
+            items: oldData.data.items.map((item: any) => {
+              if (item.id === variables.requestId) {
+                return {
+                  ...item,
+                  status: 'COMPLETED',
+                  inventory_item_id: result.inventory_item_id,
+                };
+              }
+              return item;
+            })
+          }
+        };
+      });
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+        refetch(); // 강제로 다시 불러오기
+      }, 500);
+      
+      // 성공 메시지
+      if (result.inventory_item_code) {
+        toast.success(
+          `🎉 구매완료! 품목코드: ${result.inventory_item_code}로 등록되었습니다.`,
+          { autoClose: 5000, position: 'top-center' }
+        );
+      } else {
+        toast.success('✅ 구매요청이 완료되었습니다.');
+      }
+      
+      // 쿼리 새로고침
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
+      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
+      
+      setConfirmingItem(null);
+      
+      // 품목 페이지로 이동
+      if (result.inventory_item_id) {
+        setTimeout(() => {
+          navigate(`/inventory?highlight=${result.inventory_item_id}`);
+        }, 2000);
+      }
+    },
+    onError: (error: any) => {
+      console.error('❌ 구매완료 처리 실패:', error);
+      
+      let errorMessage = '구매완료 처리 중 오류가 발생했습니다.';
+      
+      if (error.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      toast.error(errorMessage, {
+        autoClose: 7000,
+        position: 'top-center'
+      });
+      
+      setConfirmingItem(null);
+    },
+  });
 
   // 테이블 컬럼 정의
   // 테이블 컬럼 정의 수정
@@ -666,12 +754,48 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
           >
             <Eye size={14} />
           </IconButton>
+          <IconButton 
+              className="delete"
+              onClick={() => handleDelete(item.id)}
+              title="삭제"
+            >
+              <Trash2 size={14} />
+            </IconButton>
           
-          {/* 승인된 상태일 때만 수령완료 버튼 표시 */}
-          {item.status === 'SUBMITTED' && (
+          {/* {item.status === 'SUBMITTED' && (
+            <IconButton 
+              className="complete"
+              onClick={() => handlePurchaseComplete(item)}
+              title="구매완료 & 품목등록"
+            >
+              <CheckCircle2 size={14} />
+            </IconButton>
+          )} */}
+          
+          {/* 🔥 완료된 상태 표시 */}
+          {item.status !== 'COMPLETED' && (
+            <IconButton 
+              className="completed"
+              title="구매완료됨 (품목관리에서 확인)"
+              disabled
+            >
+              <Check size={14} />
+            </IconButton>
+          )}
+          
+          {/* 편집 가능한 상태일 때만 수정 버튼 표시 */}
+
+            <IconButton 
+              className="edit"
+              onClick={() => handleEdit(item)}
+              title="수정"
+            >
+              <Edit size={14} />
+            </IconButton>
+          {item.status === 'COMPLETED' && (
             <IconButton 
               className="receipt"
-              onClick={() => handleReceiptComplete(item)}
+              onClick={() => handlePurchaseComplete(item)}
               title="구매완료"
               style={{
                 backgroundColor: '#10b981',
@@ -694,27 +818,6 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             </IconButton>
           )}
           
-          {/* 편집 가능한 상태일 때만 수정 버튼 표시 */}
-          {['draft', 'SUBMITTED', 'rejected'].includes(item.status) && (
-            <IconButton 
-              className="edit"
-              onClick={() => handleEdit(item)}
-              title="수정"
-            >
-              <Edit size={14} />
-            </IconButton>
-          )}
-          
-          {/* 삭제 가능한 상태일 때만 삭제 버튼 표시 */}
-          {item.status !== 'completed' && (
-            <IconButton 
-              className="delete"
-              onClick={() => handleDelete(item.id)}
-              title="삭제"
-            >
-              <Trash2 size={14} />
-            </IconButton>
-          )}
         </ActionButtonGroup>
       ),
     },
@@ -877,6 +980,62 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
       throw error;
     }
   }
+  const handlePurchaseComplete = (request: PurchaseRequest) => {
+    // 🔥 테스트: 즉시 상태 변경
+    queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
+      if (!oldData?.data?.items) return oldData;
+      
+      return {
+        ...oldData,
+        data: {
+          ...oldData.data,
+          items: oldData.data.items.map((item: any) => {
+            if (item.id === request.id) {
+              return {
+                ...item,
+                status: 'COMPLETED',
+                inventory_item_id: 999 // 임시 값
+              };
+            }
+            return item;
+          })
+        }
+      };
+    });
+    
+    setConfirmingItem(request);
+  };
+
+  const confirmPurchaseComplete = () => {
+    if (!confirmingItem) return;
+    
+    // 구매완료 데이터 준비
+    const completionData = {
+      received_quantity: Number(confirmingItem.quantity) || 1,
+      receiver_name: confirmingItem.requester_name || '시스템',
+      receiver_email: confirmingItem.requester_email || '',
+      department: confirmingItem.department,
+      location: '창고',
+      warehouse: '메인창고',
+      condition: 'good',
+      notes: `구매요청 #${confirmingItem.id}에서 자동 완료 처리`,
+      completed_by: '현재사용자',
+      received_date: new Date().toISOString(),
+      unit_price: Number(confirmingItem.estimated_unit_price) || 0,
+      specifications: confirmingItem.specifications || '',
+      supplier_name: confirmingItem.preferred_supplier || ''
+    };
+
+    completePurchaseMutation.mutate({
+      requestId: confirmingItem.id,
+      completionData
+    });
+  };
+
+  const cancelPurchaseComplete = () => {
+    setConfirmingItem(null);
+  };
+
   // 추가: 백업 구매완료 처리 함수 (API 실패 시 대안)
   const fallbackReceiptComplete = async (item: PurchaseRequest) => {
     try {
@@ -1282,7 +1441,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         </ConfirmDialog>
       )} */}
       {confirmingItem && (
-        <ConfirmDialog onClick={cancelReceiptComplete}>
+        <ConfirmDialog onClick={cancelPurchaseComplete}>
           <ConfirmContent onClick={(e) => e.stopPropagation()}>
             <div className="confirm-icon">
               <CheckCircle2 size={32} />
@@ -1331,14 +1490,16 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             <div className="button-group">
               <Button 
                 variant="outline" 
-                onClick={cancelReceiptComplete}
+                onClick={cancelPurchaseComplete}
                 size="lg"
               >
                 취소
               </Button>
               <Button 
-                onClick={confirmReceiptComplete}
+                onClick={confirmPurchaseComplete}
                 size="lg"
+                loading={completePurchaseMutation.isPending}
+                disabled={completePurchaseMutation.isPending}
                 style={{
                   background: 'linear-gradient(135deg, #10b981, #059669)',
                   border: 'none'
