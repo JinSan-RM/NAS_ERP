@@ -1,11 +1,13 @@
 from enum import Enum
 
 class RequestStatus(str, Enum):
-    SUBMITTED = "SUBMITTED"
-    CANCELLED = "CANCELLED"
-    COMPLETED = "COMPLETED"
-    APPROVED = "APPROVED"
-    REJECTED = "REJECTED" 
+    DRAFT = "DRAFT"                 # 🔥 추가 - 임시저장
+    SUBMITTED = "SUBMITTED"         # 요청됨
+    PENDING_APPROVAL = "PENDING_APPROVAL"  # 승인 대기 (필요시)
+    APPROVED = "APPROVED"           # 승인됨
+    REJECTED = "REJECTED"           # 거절됨
+    COMPLETED = "COMPLETED"         # 완료됨
+    CANCELLED = "CANCELLED"         # 취소됨
 
 class UrgencyLevel(str, Enum):
     LOW = "LOW"

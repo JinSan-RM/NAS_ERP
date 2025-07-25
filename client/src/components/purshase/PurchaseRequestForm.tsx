@@ -321,14 +321,18 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     //   budget_code: formData.budgetCode,
     //   status: 'SUBMITTED', // 기본 상태는 '요청됨'
     // };
+    // 🔥 total_budget 계산 로직 추가
+    const quantity = Number(formData.quantity) || 1;
+    const estimatedPrice = Number(formData.estimatedPrice) || 0;
+    const totalBudget = quantity * estimatedPrice;
 
     const submitData = {
       item_name: formData.itemName,
       specifications: formData.specifications || null,
       quantity: Number(formData.quantity),
       unit: '개',
-      estimated_unit_price: Number(formData.estimatedPrice),
-      total_budget: Number(formData.quantity) * Number(formData.estimatedPrice),
+      estimated_unit_price: estimatedPrice,
+      total_budget: totalBudget, // 🔥 계산된 값 사용
       currency: 'KRW',
       category: formData.category,
       urgency: formData.urgency,
@@ -347,8 +351,9 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
     const missingFields = requiredFields.filter(field => !submitData[field]);
     if (missingFields.length > 0) {
       console.error('누락된 필수 필드:', missingFields);
-    }
-
+      toast.error(`필수 필드가 누락되었습니다: ${missingFields.join(', ')}`);
+      return;
+   }
     // 수정 모드면 업데이트, 아니면 생성
     if (isEdit && initialData?.id) {
       updateMutation.mutate({ id: initialData.id, data: submitData });

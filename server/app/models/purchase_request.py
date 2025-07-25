@@ -5,6 +5,7 @@ from sqlalchemy.orm import relationship
 from enum import Enum as PyEnum
 from app.core.database import Base
 from app.enums import RequestStatus, UrgencyLevel, ItemCategory, PurchaseMethod
+from datetime import datetime, timezone
 
 
 class PurchaseRequest(Base):
@@ -31,6 +32,10 @@ class PurchaseRequest(Base):
     request_date = Column(DateTime, default=func.now())
     required_by_date = Column(DateTime, nullable=True)  # 추가
     expected_delivery_date = Column(DateTime, nullable=True)
+    
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    priority_score = Column(Integer, default=0, nullable=False)
     # 관계 설정
     # inventory_item = relationship("UnifiedInventory", back_populates="purchase_requests")
     

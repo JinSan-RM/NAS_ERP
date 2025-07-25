@@ -151,36 +151,43 @@ class PurchaseRequestCompletionData(BaseModel):
     completed_by: Optional[str] = "시스템"
     
     
+# server/app/schemas/purchase_request.py - PurchaseRequestResponse 수정
+
 class PurchaseRequestResponse(BaseModel):
-    # 실제 DB 필드들
+    # 필수 필드들
     id: int
-    request_number: Optional[str] = None
-    item_name: str
-    specifications: Optional[str] = None
-    quantity: int
-    unit: Optional[str] = "개"
-    estimated_unit_price: Optional[float] = None
-    total_budget: Optional[float] = None
-    currency: Optional[str] = "KRW"
-    category: Optional[str] = None
-    urgency: str
-    purchase_method: Optional[str] = None
-    requester_name: str
-    requester_email: Optional[str] = None
-    department: str
-    position: Optional[str] = None
+    item_name: str = "품목명 없음"
+    quantity: int = 1
+    requester_name: str = "요청자 없음" 
+    department: str = "부서 없음"
+    urgency: str = "NORMAL"
+    status: str = "SUBMITTED"
+    created_at: str
     
-    # FE가 요구하는 필드들 - 기본값 제공
+    is_active: Optional[bool] = True
+    created_at: Optional[datetime] = None
+    priority_score: Optional[int] = 0
+    
+    # 선택적 필드들 (모두 기본값 제공)
+    request_number: Optional[str] = None
+    specifications: Optional[str] = None
+    unit: str = "개"
+    estimated_unit_price: float = 0.0
+    total_budget: float = 0.0
+    currency: str = "KRW"
+    category: Optional[str] = None
+    purchase_method: Optional[str] = None
+    requester_email: Optional[str] = None
+    position: Optional[str] = None
     phone_number: Optional[str] = None
     project: Optional[str] = None
     budget_code: Optional[str] = None
     cost_center: Optional[str] = None
     preferred_supplier: Optional[str] = None
     supplier_contact: Optional[str] = None
-    request_date: str = Field(default_factory=lambda: datetime.now().isoformat())
+    request_date: Optional[str] = None
     expected_delivery_date: Optional[str] = None
     required_by_date: Optional[str] = None
-    status: str = "SUBMITTED"
     approval_level: Optional[int] = None
     current_approver: Optional[str] = None
     approved_date: Optional[str] = None
@@ -192,68 +199,88 @@ class PurchaseRequestResponse(BaseModel):
     business_case: Optional[str] = None
     notes: Optional[str] = None
     attachment_urls: Optional[str] = None
-    is_active: Optional[bool] = True
-    created_at: str = Field(default_factory=lambda: datetime.now().isoformat())
+    is_active: bool = True
     updated_at: Optional[str] = None
     created_by: Optional[str] = None
     updated_by: Optional[str] = None
-    priority_score: Optional[float] = 0.0
-    estimated_approval_time: Optional[int] = 0
-    actual_approval_time: Optional[int] = 0
+    priority_score: float = 0.0
+    estimated_approval_time: int = 0
+    actual_approval_time: int = 0
 
     @classmethod
     def from_orm(cls, obj):
-        """DB 객체에서 Response 스키마로 변환"""
-        return cls(
-            # 실제 DB 필드들 (getattr 대신 직접 접근)
-            id=obj.id,
-            request_number=obj.request_number,
-            item_name=obj.item_name,
-            specifications=obj.specifications,
-            quantity=obj.quantity,
-            unit=obj.unit,
-            estimated_unit_price=obj.estimated_unit_price,
-            total_budget=obj.total_budget,
-            currency=obj.currency,
-            category=obj.category,
-            urgency=obj.urgency,
-            purchase_method=obj.purchase_method,
-            requester_name=obj.requester_name,
-            requester_email=obj.requester_email,
-            department=obj.department,
-            position=obj.position,
-            justification=getattr(obj, 'justification', ''),  # DB에 있는 필드
-            
-            # DB에 있는 다른 필드들
-            phone_number=getattr(obj, 'phone_number', None),
-            project=getattr(obj, 'project', None),
-            budget_code=getattr(obj, 'budget_code', None),
-            cost_center=getattr(obj, 'cost_center', None),
-            preferred_supplier=getattr(obj, 'preferred_supplier', None),
-            supplier_contact=getattr(obj, 'supplier_contact', None),
-            request_date=obj.request_date.isoformat() if obj.request_date else datetime.now().isoformat(),
-            expected_delivery_date=obj.expected_delivery_date.isoformat() if obj.expected_delivery_date else None,
-            required_by_date=obj.required_by_date.isoformat() if obj.required_by_date else None,
-            status=obj.status,
-            approval_level=getattr(obj, 'approval_level', None),
-            current_approver=getattr(obj, 'current_approver', None),
-            approved_date=obj.approved_date.isoformat() if getattr(obj, 'approved_date', None) else None,
-            approved_by=getattr(obj, 'approved_by', None),
-            rejected_date=obj.rejected_date.isoformat() if getattr(obj, 'rejected_date', None) else None,
-            rejected_by=getattr(obj, 'rejected_by', None),
-            rejection_reason=getattr(obj, 'rejection_reason', None),
-            business_case=getattr(obj, 'business_case', None),
-            notes=getattr(obj, 'notes', None),
-            attachment_urls=getattr(obj, 'attachment_urls', None),
-            is_active=obj.is_active,
-            created_at=obj.created_at.isoformat() if obj.created_at else datetime.now().isoformat(),
-            updated_at=obj.updated_at.isoformat() if getattr(obj, 'updated_at', None) else None,
-            created_by=getattr(obj, 'created_by', None),
-            updated_by=getattr(obj, 'updated_by', None),
-            priority_score=float(obj.priority_score) if obj.priority_score else 0.0,
-            estimated_approval_time=getattr(obj, 'estimated_approval_time', 0) or 0,
-            actual_approval_time=getattr(obj, 'actual_approval_time', 0) or 0
-        )
+        """DB 객체에서 안전하게 변환"""
+        try:
+            return cls(
+                # 필수 필드들 (안전한 기본값 제공)
+                id=getattr(obj, 'id', 0),
+                item_name=getattr(obj, 'item_name', '품목명 없음') or '품목명 없음',
+                quantity=getattr(obj, 'quantity', 1) or 1,
+                requester_name=getattr(obj, 'requester_name', '요청자 없음') or '요청자 없음',
+                department=getattr(obj, 'department', '부서 없음') or '부서 없음',
+                urgency=getattr(obj, 'urgency', 'NORMAL') or 'NORMAL',
+                status=getattr(obj, 'status', 'SUBMITTED') or 'SUBMITTED',
+                
+                # 날짜 필드들 (안전하게 변환)
+                created_at=cls._safe_date_convert(getattr(obj, 'request_date', None)) or 
+                          cls._safe_date_convert(getattr(obj, 'created_at', None)) or 
+                          datetime.now().isoformat(),
+                
+                # 숫자 필드들 (안전한 기본값)
+                estimated_unit_price=float(getattr(obj, 'estimated_unit_price', 0) or 0),
+                total_budget=float(getattr(obj, 'total_budget', 0) or 0),
+                priority_score=float(getattr(obj, 'priority_score', 0) or 0),
+                
+                # 문자열 필드들
+                request_number=getattr(obj, 'request_number', None),
+                specifications=getattr(obj, 'specifications', None),
+                unit=getattr(obj, 'unit', '개') or '개',
+                currency=getattr(obj, 'currency', 'KRW') or 'KRW',
+                category=getattr(obj, 'category', None),
+                purchase_method=getattr(obj, 'purchase_method', None),
+                requester_email=getattr(obj, 'requester_email', None),
+                position=getattr(obj, 'position', None),
+                justification=getattr(obj, 'justification', '') or '',
+                
+                # 선택적 날짜 필드들
+                request_date=cls._safe_date_convert(getattr(obj, 'request_date', None)),
+                expected_delivery_date=cls._safe_date_convert(getattr(obj, 'expected_delivery_date', None)),
+                approved_date=cls._safe_date_convert(getattr(obj, 'approved_date', None)),
+                updated_at=cls._safe_date_convert(getattr(obj, 'updated_at', None)),
+                
+                # 기타 필드들
+                is_active=bool(getattr(obj, 'is_active', True)),
+                estimated_approval_time=int(getattr(obj, 'estimated_approval_time', 0) or 0),
+                actual_approval_time=int(getattr(obj, 'actual_approval_time', 0) or 0),
+            )
+        except Exception as e:
+            print(f"⚠️ from_orm 변환 실패: {e}")
+            # 최소한의 안전한 객체 반환
+            return cls(
+                id=getattr(obj, 'id', 0),
+                item_name=getattr(obj, 'item_name', '품목명 없음'),
+                quantity=getattr(obj, 'quantity', 1),
+                requester_name=getattr(obj, 'requester_name', '요청자 없음'),
+                department=getattr(obj, 'department', '부서 없음'),
+                urgency=getattr(obj, 'urgency', 'NORMAL'),
+                status=getattr(obj, 'status', 'SUBMITTED'),
+                created_at=datetime.now().isoformat()
+            )
+    
+    @staticmethod
+    def _safe_date_convert(date_obj):
+        """날짜 객체를 안전하게 ISO 문자열로 변환"""
+        if date_obj is None:
+            return None
+        try:
+            if hasattr(date_obj, 'isoformat'):
+                return date_obj.isoformat()
+            elif isinstance(date_obj, str):
+                return date_obj
+            else:
+                return str(date_obj)
+        except:
+            return None
 
     class Config:
         from_attributes = True

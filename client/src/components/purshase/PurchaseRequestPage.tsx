@@ -509,6 +509,19 @@ const shimmerAnimation = `
   }
 `;
 
+const pulseAnimation = `
+  @keyframes pulse {
+    0%, 100% { 
+      transform: scale(1);
+      opacity: 1;
+    }
+    50% { 
+      transform: scale(1.05);
+      opacity: 0.8;
+    }
+  }
+`;
+
 // 메인 컴포넌트
 const PurchaseRequestPage: React.FC = () => {
   const navigate = useNavigate();
@@ -570,22 +583,87 @@ const PurchaseRequestPage: React.FC = () => {
       toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
     },
   });
+
   const completePurchaseMutation = useMutation({
-    mutationFn: async ({ requestId, completionData }: { 
+    mutationFn: async ({ requestId, requestData }: { 
       requestId: number; 
-      completionData: any 
+      requestData: PurchaseRequest;
     }) => {
-      console.log('🚀 구매완료 처리 시작:', { requestId, completionData });
+      console.log('🚀 구매완료 + 품목 등록 시작:', { requestId, requestData });
       
-      const result = await purchaseApi.completePurchase(requestId, completionData);
-      console.log('✅ API 응답:', result);
-      
-      return result;
+      try {
+        // 1️⃣ 먼저 구매 요청 상태를 COMPLETED로 변경
+        console.log('📝 1단계: 구매 요청 상태 업데이트');
+        const updateResult = await purchaseApi.updateRequest(requestId, {
+          status: 'COMPLETED',
+          completed_date: new Date().toISOString(),
+          completed_by: '현재사용자'
+        });
+        console.log('✅ 구매 요청 상태 업데이트 성공:', updateResult);
+
+        // 2️⃣ 품목관리에 새 품목 등록
+        console.log('📦 2단계: 품목관리에 등록');
+        
+        // 구매 요청 데이터를 품목관리용 데이터로 변환
+        const inventoryData = {
+          item_code: `ITM-${new Date().toISOString().split('T')[0].replace(/-/g, '')}-${requestId.toString().padStart(4, '0')}`,
+          item_name: requestData.item_name || '품목명 없음',
+          category: requestData.category || 'OTHER',
+          description: requestData.specifications || `구매요청 #${requestId}에서 자동 생성`,
+          current_stock: Number(requestData.quantity) || 0,
+          minimum_stock: Math.max(1, Math.ceil((Number(requestData.quantity) || 0) * 0.2)),
+          maximum_stock: (Number(requestData.quantity) || 0) * 2,
+          unit: requestData.unit || '개',
+          unit_price: Number(requestData.estimated_unit_price) || 0,
+          currency: requestData.currency || 'KRW',
+          supplier_name: requestData.preferred_supplier || '',
+          location: '창고',
+          warehouse: '메인창고',
+          purchase_request_id: requestId,
+          notes: `구매요청 #${requestId}에서 자동 생성됨`,
+          is_active: true,
+          created_by: '현재사용자',
+          department: requestData.department
+        };
+
+        console.log('📤 품목 등록 데이터:', inventoryData);
+        
+        // 품목관리 API 호출 (inventoryApi 사용)
+        const inventoryResult = await inventoryApi.createItem(inventoryData);
+        console.log('✅ 품목 등록 성공:', inventoryResult);
+
+        return {
+          success: true,
+          purchase_update: updateResult,
+          inventory_created: inventoryResult,
+          inventory_item_id: inventoryResult.data?.id,
+          inventory_item_code: inventoryData.item_code,
+          message: '구매완료 및 품목 등록 성공'
+        };
+
+      } catch (error) {
+        console.error('❌ 처리 중 오류:', error);
+        
+        // 부분 실패 처리: 구매 요청은 성공했지만 품목 등록 실패
+        if (error.message?.includes('inventory') || error.response?.status) {
+          console.warn('⚠️ 품목 등록 실패, 구매 요청만 완료됨');
+          return {
+            success: true,
+            partial_success: true,
+            purchase_update: true,
+            inventory_created: false,
+            message: '구매 요청은 완료되었지만 품목 등록에 실패했습니다.',
+            error: error.message
+          };
+        }
+        
+        throw error;
+      }
     },
-    onSuccess: (result, variables) => {
-      console.log('🎉 구매완료 처리 성공:', result);
+    onSuccess: async (result, variables) => {
+      console.log('🎉 구매완료 처리 결과:', result);
       
-      // 즉시 상태 업데이트
+      // 캐시 업데이트
       queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
         if (!oldData?.data?.items) return oldData;
         
@@ -598,7 +676,10 @@ const PurchaseRequestPage: React.FC = () => {
                 return {
                   ...item,
                   status: 'COMPLETED',
+                  completed_date: new Date().toISOString(),
+                  completed_by: '현재사용자',
                   inventory_item_id: result.inventory_item_id,
+                  inventory_item_code: result.inventory_item_code
                 };
               }
               return item;
@@ -606,54 +687,41 @@ const PurchaseRequestPage: React.FC = () => {
           }
         };
       });
-      setTimeout(() => {
-        queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-        refetch(); // 강제로 다시 불러오기
-      }, 500);
       
-      // 성공 메시지
-      if (result.inventory_item_code) {
+      // 성공 메시지 표시
+      if (result.inventory_created !== false) {
+        // 완전 성공
         toast.success(
-          `🎉 구매완료! 품목코드: ${result.inventory_item_code}로 등록되었습니다.`,
+          `🎉 구매완료! 품목코드: ${result.inventory_item_code}로 등록되었습니다!`,
           { autoClose: 5000, position: 'top-center' }
         );
-      } else {
-        toast.success('✅ 구매요청이 완료되었습니다.');
-      }
-      
-      // 쿼리 새로고침
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
-      queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
-      
-      setConfirmingItem(null);
-      
-      // 품목 페이지로 이동
-      if (result.inventory_item_id) {
+        
+        // 품목관리 페이지로 이동
         setTimeout(() => {
           navigate(`/inventory?highlight=${result.inventory_item_id}`);
         }, 2000);
+        
+      } else {
+        // 부분 성공
+        toast.warning(
+          '구매 요청은 완료되었지만 품목 등록에 실패했습니다. 수동으로 등록해주세요.',
+          { autoClose: 7000 }
+        );
       }
+      
+      // 쿼리 새로고침
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['purchase-requests'] }),
+        queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
+        queryClient.invalidateQueries({ queryKey: ['inventory-stats'] })
+      ]);
+      
+      setConfirmingItem(null);
     },
     onError: (error: any) => {
-      console.error('❌ 구매완료 처리 실패:', error);
-      
-      let errorMessage = '구매완료 처리 중 오류가 발생했습니다.';
-      
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast.error(errorMessage, {
-        autoClose: 7000,
-        position: 'top-center'
-      });
-      
+      console.error('❌ 구매완료 처리 완전 실패:', error);
+      toast.error('구매완료 처리 중 오류가 발생했습니다.');
       setConfirmingItem(null);
     },
   });
@@ -744,47 +812,81 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     {
       key: 'actions',
       label: '작업',
-      width: '160px', // 폭을 늘림
-      render: (_, item) => (
-        <ActionButtonGroup>
-          <IconButton 
-            className="view"
-            onClick={() => handleView(item)}
-            title="상세보기"
-          >
-            <Eye size={14} />
-          </IconButton>
-          <IconButton 
+      width: '160px',
+      render: (_, item) => {
+        const isCompleted = item.status === 'COMPLETED';
+        const hasInventoryItem = item.inventory_item_id || item.inventory_item_code;
+        
+        return (
+          <ActionButtonGroup>
+            <IconButton 
+              className="view"
+              onClick={() => handleView(item)}
+              title="상세보기"
+            >
+              <Eye size={14} />
+            </IconButton>
+            
+            <IconButton 
               className="delete"
               onClick={() => handleDelete(item.id)}
               title="삭제"
             >
               <Trash2 size={14} />
             </IconButton>
-          
-          {/* {item.status === 'SUBMITTED' && (
-            <IconButton 
-              className="complete"
-              onClick={() => handlePurchaseComplete(item)}
-              title="구매완료 & 품목등록"
-            >
-              <CheckCircle2 size={14} />
-            </IconButton>
-          )} */}
-          
-          {/* 🔥 완료된 상태 표시 */}
-          {item.status !== 'COMPLETED' && (
-            <IconButton 
-              className="completed"
-              title="구매완료됨 (품목관리에서 확인)"
-              disabled
-            >
-              <Check size={14} />
-            </IconButton>
-          )}
-          
-          {/* 편집 가능한 상태일 때만 수정 버튼 표시 */}
-
+            
+            {/* 🔥 완료 상태와 품목 등록 여부에 따른 버튼 표시 */}
+            {isCompleted ? (
+              hasInventoryItem ? (
+                // ✅ 완전 완료 (품목까지 등록됨)
+                <IconButton 
+                  className="completed"
+                  title={`구매완료 & 품목등록 완료 ${item.inventory_item_code ? `(${item.inventory_item_code})` : ''}`}
+                  onClick={() => {
+                    if (item.inventory_item_id) {
+                      navigate(`/inventory?highlight=${item.inventory_item_id}`);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: '#10b981',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: item.inventory_item_id ? 'pointer' : 'default'
+                  }}
+                >
+                  <Package2 size={14} />
+                </IconButton>
+              ) : (
+                // ⚠️ 부분 완료 (구매만 완료, 품목 등록 안됨)
+                <IconButton 
+                  className="partial"
+                  title="구매완료됨 (품목 등록 실패)"
+                  style={{
+                    backgroundColor: '#6b7280',
+                    color: 'white',
+                    borderRadius: '6px',
+                    cursor: 'default'
+                  }}
+                >
+                  <Check size={14} />
+                </IconButton>
+              )
+            ) : (
+              // 🟢 미완료 - 구매완료 버튼
+              <IconButton 
+                className="complete"
+                onClick={() => handlePurchaseComplete(item)}
+                title="구매완료 + 품목등록"
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: 'white',
+                  borderRadius: '6px'
+                }}
+              >
+                <CheckCircle2 size={14} />
+              </IconButton>
+            )}
+            
             <IconButton 
               className="edit"
               onClick={() => handleEdit(item)}
@@ -792,36 +894,11 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             >
               <Edit size={14} />
             </IconButton>
-          {item.status === 'COMPLETED' && (
-            <IconButton 
-              className="receipt"
-              onClick={() => handlePurchaseComplete(item)}
-              title="구매완료"
-              style={{
-                backgroundColor: '#10b981',
-                color: 'white',
-                borderRadius: '6px',
-                position: 'relative',
-                overflow: 'hidden'
-              }}
-            >
-              <CheckCircle2 size={14} />
-              <span style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                right: 0,
-                bottom: 0,
-                background: 'linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.3) 50%, transparent 70%)',
-                animation: 'shimmer 2s infinite'
-              }} />
-            </IconButton>
-          )}
-          
-        </ActionButtonGroup>
-      ),
-    },
-  ], []);
+          </ActionButtonGroup>
+        );
+      },
+    }],
+ []);
 
   // 이벤트 핸들러
   const handleView = (request: PurchaseRequest) => {
@@ -981,54 +1058,20 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     }
   }
   const handlePurchaseComplete = (request: PurchaseRequest) => {
-    // 🔥 테스트: 즉시 상태 변경
-    queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
-      if (!oldData?.data?.items) return oldData;
-      
-      return {
-        ...oldData,
-        data: {
-          ...oldData.data,
-          items: oldData.data.items.map((item: any) => {
-            if (item.id === request.id) {
-              return {
-                ...item,
-                status: 'COMPLETED',
-                inventory_item_id: 999 // 임시 값
-              };
-            }
-            return item;
-          })
-        }
-      };
-    });
-    
+    console.log('🔄 구매완료 처리 요청:', request);
     setConfirmingItem(request);
   };
+
 
   const confirmPurchaseComplete = () => {
     if (!confirmingItem) return;
     
-    // 구매완료 데이터 준비
-    const completionData = {
-      received_quantity: Number(confirmingItem.quantity) || 1,
-      receiver_name: confirmingItem.requester_name || '시스템',
-      receiver_email: confirmingItem.requester_email || '',
-      department: confirmingItem.department,
-      location: '창고',
-      warehouse: '메인창고',
-      condition: 'good',
-      notes: `구매요청 #${confirmingItem.id}에서 자동 완료 처리`,
-      completed_by: '현재사용자',
-      received_date: new Date().toISOString(),
-      unit_price: Number(confirmingItem.estimated_unit_price) || 0,
-      specifications: confirmingItem.specifications || '',
-      supplier_name: confirmingItem.preferred_supplier || ''
-    };
-
+    console.log('🆕 구매완료 + 품목등록 처리 시작');
+    
+    // 구매 요청 데이터와 함께 전달
     completePurchaseMutation.mutate({
       requestId: confirmingItem.id,
-      completionData
+      requestData: confirmingItem
     });
   };
 
@@ -1444,16 +1487,18 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         <ConfirmDialog onClick={cancelPurchaseComplete}>
           <ConfirmContent onClick={(e) => e.stopPropagation()}>
             <div className="confirm-icon">
-              <CheckCircle2 size={32} />
+              <Package2 size={32} />
             </div>
             
-            <div className="confirm-title">구매완료 처리</div>
+            <div className="confirm-title">구매완료 + 품목등록</div>
             
             <div className="confirm-message">
-              아래 구매 요청을 완료 처리하시겠습니까?
+              아래 구매 요청을 완료하고 품목관리에 등록하시겠습니까?
             </div>
+            
             <div className="confirm-message" style={{ color: '#10b981', fontWeight: 'bold' }}>
-              ✨ 완료 후 자동으로 품목관리에 등록되고 해당 페이지로 이동합니다.
+              ✨ 1) 구매 요청 상태를 '완료'로 변경<br/>
+              ✨ 2) 품목관리에 자동 등록 후 해당 페이지로 이동
             </div>
             
             <div className="item-info">
@@ -1481,7 +1526,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
               )}
               <div className="info-row">
                 <span className="label">생성될 품목코드:</span>
-                <span className="value" style={{ color: '#3b82f6' }}>
+                <span className="value" style={{ color: '#3b82f6', fontWeight: 'bold' }}>
                   ITM-{new Date().toISOString().split('T')[0].replace(/-/g, '')}-{confirmingItem.id.toString().padStart(4, '0')}
                 </span>
               </div>
@@ -1501,12 +1546,12 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
                 loading={completePurchaseMutation.isPending}
                 disabled={completePurchaseMutation.isPending}
                 style={{
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                   border: 'none'
                 }}
               >
-                <CheckCircle2 size={18} />
-                구매완료 & 품목등록
+                <Package2 size={18} />
+                구매완료 + 품목등록
               </Button>
             </div>
           </ConfirmContent>
