@@ -63,6 +63,7 @@ interface ReceiptHistory {
   received_date: string;
   condition?: string;
   notes?: string;
+  image_url?: string;  // 새로 추가: 이미지 URL 필드 (백엔드에서 제공)
 }
 
 const Container = styled.div`
@@ -178,7 +179,6 @@ const QuantityInfo = styled.div`
 
 const InventoryPage: React.FC = () => {
   const queryClient = useQueryClient();
-  
   
   // State
   const [currentPage, setCurrentPage] = useState(1);
@@ -385,13 +385,6 @@ const InventoryPage: React.FC = () => {
       ),
     },
     {
-      key: 'category',
-      label: '카테고리',
-      sortable: true,
-      width: '120px',
-      render: (value) => value || '-',
-    },
-    {
       key: 'current_quantity',
       label: '재고 현황',
       sortable: true,
@@ -411,25 +404,6 @@ const InventoryPage: React.FC = () => {
       ),
     },
     {
-      key: 'condition_quantities',
-      label: '상태별 재고',
-      width: '140px',
-      render: (value) => {
-        if (!value) return '-';
-        return (
-          <div style={{ fontSize: '0.8rem' }}>
-            <div>양호: {value.good || 0}</div>
-            <div>우수: {value.excellent || 0}</div>
-            {(value.damaged > 0 || value.defective > 0) && (
-              <div style={{ color: '#EF4444' }}>
-                손상: {value.damaged || 0} / 불량: {value.defective || 0}
-              </div>
-            )}
-          </div>
-        );
-      },
-    },
-    {
       key: 'unit_price',
       label: '단가',
       sortable: true,
@@ -438,24 +412,8 @@ const InventoryPage: React.FC = () => {
       render: (value, item) => {
         // 🔥 null/undefined 체크 추가
         if (!value || value === 0) return '-';
-        const currency = item.currency || 'KRW';
+        const currency = item.currency || '원';
         return `${currency} ${value.toLocaleString()}`;
-      },
-    },
-    {
-      key: 'supplier_name',
-      label: '공급업체',
-      sortable: true,
-      width: '150px',
-      render: (value) => value || '-',
-    },
-    {
-      key: 'location',
-      label: '위치',
-      width: '100px',
-      render: (value, item) => {
-        const location = value || item.warehouse;
-        return location || '-';
       },
     },
     {
@@ -465,12 +423,37 @@ const InventoryPage: React.FC = () => {
       render: (value) => value ? new Date(value).toLocaleDateString('ko-KR') : '-',
     },
     {
+      key: 'image',
+      label: '이미지',
+      width: '500px',
+      render: (value, item) => (
+        <div className="image-preview-grid">
+          {item.receipt_history?.slice(0, 3).map((receipt, index) => (
+            receipt.image_url ? (
+              <img
+                key={index}
+                src={receipt.image_url}
+                alt={`Receipt ${index + 1}`}
+                className="thumbnail"
+                style={{ width: '100px', height: '100px', objectFit: 'cover', margin: '5px' }}
+              />
+            ) : (
+              <div key={index} className="no-image">이미지 없음</div>
+            )
+          ))}
+          {item.receipt_history?.length > 3 && (
+            <span className="more-images">+{item.receipt_history.length - 3}개</span>
+          )}
+        </div>
+      ),
+    },
+    {
       key: 'is_active',
       label: '상태',
-      width: '80px',
+      width: '180px',
       render: (value) => (
         <StatusBadge isActive={value}>
-          {value ? '활성' : '비활성'}
+          {value ? '수령 완료' : '수령 대기'}
         </StatusBadge>
       ),
     },

@@ -1,4 +1,8 @@
 # server/app/crud/inventory.py - Unified Inventory 지원
+import os
+import uuid
+from PIL import Image
+import stat  # 추가: 권한 체크용
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
@@ -501,15 +505,29 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
 
     
     def upload_image(self, db: Session, *, file, image_data: InventoryImageCreate) -> InventoryImage:
-        """이미지 업로드"""
-        import os
-        import uuid
-        from PIL import Image
+        upload_dir = "/app/uploads/inventory_images"  # 절대 경로 사용
+        try:
+            if not os.path.exists(upload_dir):
+                os.makedirs(upload_dir, exist_ok=True)
+                os.chmod(upload_dir, stat.S_IRWXU | stat.S_IRWXG | stat.S_IROTH)  # 권한 설정 (775)
+            # 나머지 로직 (파일 저장 등)
+        except PermissionError as e:
+            raise ValueError(f"권한 오류: {str(e)}")  # 400 반환으로 변경
+        """이미지 업로드 - 파일 없음 처리 추가"""
+        if not file or not file.filename:
+            raise ValueError("이미지 파일이 필요합니다.")  # 400 반환으로 변경
+        
+        # 파일 검증
+        if not file.content_type.startswith('image/'):
+            raise ValueError("이미지 파일만 업로드 가능합니다.")
+        
+        if file.size > 10 * 1024 * 1024:  # 10MB 제한
+            raise ValueError("파일 크기는 10MB를 초과할 수 없습니다.")
         
         # 파일 저장 경로 설정
-        upload_dir = "uploads/inventory_images"
-        os.makedirs(upload_dir, exist_ok=True)
-        
+        upload_dir = os.path.abspath("uploads/inventory_images")  # os 사용 예시
+        os.makedirs(upload_dir, exist_ok=True)  # 디렉토리 생성 (os 사용)
+            
         # 고유 파일명 생성
         file_extension = os.path.splitext(file.filename)[1]
         unique_filename = f"{uuid.uuid4()}{file_extension}"
@@ -519,7 +537,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         with open(file_path, "wb") as buffer:
             buffer.write(file.file.read())
         
-        # 썸네일 생성
+        # 썸네일 생성 (에러 핸들링 강화)
         thumbnail_path = None
         try:
             with Image.open(file_path) as img:
@@ -528,7 +546,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
                 thumbnail_path = os.path.join(upload_dir, thumbnail_filename)
                 img.save(thumbnail_path)
         except Exception as e:
-            print(f"썸네일 생성 실패: {e}")
+            print(f"썸네일 생성 실패: {e}")  # 로그만, 실패해도 진행
         
         # 이미지 정보 저장
         image_obj = InventoryImage(
@@ -560,6 +578,7 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         db.commit()
         db.refresh(image_obj)
         return image_obj
+    
     
     def delete_image(self, db: Session, *, image_id: int, item_id: int) -> bool:
         """이미지 삭제"""

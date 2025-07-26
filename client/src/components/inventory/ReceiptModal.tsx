@@ -153,6 +153,11 @@ const ReceiptWithImagesModal: React.FC<ReceiptWithImagesModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
+    if (images.length === 0) {
+        alert('이미지는 필수입니다. 최소 1개의 이미지를 업로드해주세요.');
+        return;
+    }
+
     const receiptData = {
       receipt_number: formData.receipt_number || `REC-${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 15)}`,
       received_quantity: Number(formData.received_quantity) || 1,
@@ -169,8 +174,8 @@ const ReceiptWithImagesModal: React.FC<ReceiptWithImagesModalProps> = ({
 
     // 유효성 체크
     if (!receiptData.receiver_name || receiptData.received_quantity < 1 || !receiptData.department || !receiptData.received_date || !receiptData.item_name || receiptData.expected_quantity < 1) {
-      alert('필수 필드를 확인하세요: 수령자명, 수량, 부서, 수령일, 품목명, 예상 수량');
-      return;
+        alert('필수 필드를 확인하세요: 수령자명, 수량, 부서, 수령일, 품목명, 예상 수량');
+        return;
     }
 
     onSubmit(receiptData, images);

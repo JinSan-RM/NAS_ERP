@@ -4,11 +4,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile
 from sqlalchemy.orm import Session
 from datetime import datetime
 
-
+from app.core.config import settings  # 설정 파일에서 이미지 저장 경로 가져오기 가정
 from app import crud, schemas
 from app.api.deps import get_db
 
 router = APIRouter()
+
 
 # 기본 CRUD 엔드포인트들
 @router.get("/", response_model=schemas.UnifiedInventoryList)
@@ -164,6 +165,70 @@ def delete_inventory(
     crud.inventory.remove(db=db, id=item_id)
     return {"message": "재고 항목이 삭제되었습니다."}
 
+@router.post("/{item_id}/complete-receipt-with-images", response_model=schemas.UnifiedInventoryInDB)
+async def complete_receipt_with_images(
+    item_id: int,
+    receipt_in: schemas.ReceiptHistoryCreate = Depends(),  # JSON 데이터
+    images: List[UploadFile] = File(None),  # 여러 이미지 파일 (선택으로 유지)
+    db: Session = Depends(get_db)
+):
+    """수령 완료 처리 (이미지 필수 포함)"""
+    inventory = crud.inventory.get(db=db, id=item_id)
+    if not inventory:
+        raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
+    
+    # 이미지 필수 확인 (최소 1개)
+    if not images or len(images) == 0:
+        raise HTTPException(status_code=400, detail="이미지는 필수입니다. 최소 1개의 이미지를 업로드해주세요.")
+    
+    image_urls = []
+    for image in images:
+        if not image.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="이미지 파일만 업로드 가능합니다.")
+        # 파일 저장 (기존 로직 유지)
+        file_extension = image.filename.split('.')[-1]
+        filename = f"{uuid.uuid4()}.{file_extension}"
+        file_path = os.path.join(settings.IMAGE_UPLOAD_DIR, filename)
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(image.file, buffer)
+        image_url = f"{settings.BASE_URL}/uploads/{filename}"
+        image_urls.append(image_url)
+    
+    # receipt_in에 image_urls 추가 및 나머지 로직 (기존 코드 유지)
+    receipt_data = receipt_in.dict()
+    receipt_data['image_urls'] = image_urls
+    updated_inventory = crud.inventory.add_receipt(db=db, item_id=item_id, receipt_in=receipt_data)
+    inventory.total_received += receipt_data['received_quantity']
+    inventory.current_quantity = inventory.total_received - (inventory.reserved_quantity or 0)
+    condition = receipt_data.get('condition', 'good')
+    if condition in inventory.condition_quantities:
+        inventory.condition_quantities[condition] += receipt_data['received_quantity']
+    db.commit()
+    db.refresh(inventory)
+    return inventory
+
+
+@router.delete("/{item_id}/receipts/{receipt_number}/images/{image_index}")
+def delete_receipt_image(
+    item_id: int,
+    receipt_number: str,
+    image_index: int,
+    db: Session = Depends(get_db)
+):
+    inventory = crud.inventory.get(db=db, id=item_id)
+    if not inventory:
+        raise HTTPException(status_code=404, detail="재고 항목을 찾을 수 없습니다.")
+    
+    receipt = next((r for r in inventory.receipt_history if r['receipt_number'] == receipt_number), None)
+    if not receipt or image_index >= len(receipt.get('image_urls', [])):
+        raise HTTPException(status_code=404, detail="이미지를 찾을 수 없습니다.")
+    
+    # URL 제거 (파일 삭제 로직 추가 가능)
+    del receipt['image_urls'][image_index]
+    db.commit()
+    db.refresh(inventory)
+    return {"message": "이미지가 삭제되었습니다."}
+
 # 수령 관리 엔드포인트들
 @router.post("/{item_id}/receipts", response_model=schemas.UnifiedInventoryInDB)
 def add_receipt(
@@ -317,6 +382,10 @@ def upload_image(
     image_type: str = Query(default="general"),
     db: Session = Depends(get_db)
 ):
+    if not file or not file.filename:
+        raise HTTPException(status_code=400, detail="이미지 파일 필요")
+    if not file.content_type.startswith('image/'):
+        raise HTTPException(status_code=400, detail="이미지 파일만 가능")
     """품목 이미지 업로드"""
     inventory = crud.inventory.get(db=db, id=item_id)
     if not inventory:

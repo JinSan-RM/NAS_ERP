@@ -27,6 +27,7 @@ class ReceiptHistoryCreate(ReceiptHistoryBase):
     location: Optional[str] = None
     condition: Optional[str] = 'good'
     notes: Optional[str] = None
+    image_urls: Optional[List[str]] = None  # 새로 추가: 이미지 URL 배열
 
 class ReceiptHistoryInDB(ReceiptHistoryBase):
     model_config = ConfigDict(from_attributes=True)

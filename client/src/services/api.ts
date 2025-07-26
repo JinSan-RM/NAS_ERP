@@ -968,9 +968,10 @@ export const inventoryApi = {
       // 1. 수령 이력 먼저 추가
       const receipt = await apiRequest.post(`/inventory/${itemId}/receipts`, receiptData);
       
-      // 2. 이미지가 있으면 업로드
+      // 2. 이미지가 있으면 업로드 (명시적 체크 강화)
       if (images && images.length > 0) {
         const uploadPromises = images.map(async (file, index) => {
+          console.log(`${successfulUploads.length}개 이미지 업로드 완료`);
           const formData = new FormData();
           formData.append('file', file);
           formData.append('image_type', 'receipt');
@@ -988,11 +989,13 @@ export const inventoryApi = {
           .map(result => (result as PromiseFulfilledResult<any>).value.data);
         
         console.log(`${successfulUploads.length}개 이미지 업로드 완료`);
+      } else {
+        console.log('이미지 없음: 업로드 스킵');
       }
       
       return receipt;
     } catch (error) {
-      console.log('오류 상세:', error.response?.data?.detail)
+      console.log('오류 상세:', error.response?.data?.detail);
       console.error('수령 완료 처리 실패:', error);
       throw error;
     }
