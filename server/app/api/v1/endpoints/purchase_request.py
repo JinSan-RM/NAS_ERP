@@ -316,60 +316,117 @@ def complete_purchase_request(
         )
         
         
-# @router.post("/", response_model=PurchaseRequest)
-# def create_purchase_request(
-#     *,
-#     db: Session = Depends(get_db),
-#     request_in: PurchaseRequestCreate
-# ):
-#     """
-#     새 구매 요청 생성
-#     """
-#     try:
-#         # request_in을 dict로 변환
-#         request_data = request_in.dict()
+@router.post("/", response_model=dict)
+def create_purchase_request(
+    *,
+    db: Session = Depends(get_db),
+    request_in: dict  # 🔥 스키마 대신 dict 사용
+):
+    """
+    새 구매 요청 생성 - 유연한 데이터 처리
+    """
+    try:
+        print(f"🆕 새 구매 요청 생성 시작")
+        print(f"📥 수신 데이터: {request_in}")
         
-#         # request_number 자동 생성
-#         from datetime import datetime
-#         now = datetime.now()
-#         request_number = f"PR{now.strftime('%Y%m')}{now.microsecond:06d}"
-#         request_data['request_number'] = request_number
+        # 필수 필드 검증
+        required_fields = ['item_name', 'quantity', 'requester_name', 'department', 'justification']
+        for field in required_fields:
+            if field not in request_in or not request_in[field]:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"필수 필드가 누락되었습니다: {field}"
+                )
         
-#         # DB 모델에 실제로 존재하는 필드만 필터링
-#         allowed_fields = {
-#             'request_number', 'item_name', 'specifications', 'quantity',
-#             'unit', 'estimated_unit_price', 'total_budget', 'currency',
-#             'category', 'urgency', 'purchase_method', 'requester_name',
-#             'requester_email', 'department', 'position', 'phone_number',
-#             'project', 'budget_code', 'cost_center', 'preferred_supplier',
-#             'supplier_contact', 'request_date', 'expected_delivery_date',
-#             'required_by_date', 'status', 'approval_level', 'current_approver',
-#             'approved_date', 'approved_by', 'rejected_date', 'rejected_by',
-#             'rejection_reason', 'justification', 'business_case', 'notes',
-#             'attachment_urls', 'is_active', 'created_at', 'updated_at',
-#             'created_by', 'updated_by', 'priority_score', 'estimated_approval_time',
-#             'actual_approval_time'
-#         }
-#         # 허용된 필드만 추출하고 None 값 제거
-#         filtered_data = {
-#             k: v for k, v in request_data.items() 
-#             if k in allowed_fields and v is not None
-#         }
+        # request_number 자동 생성
+        from datetime import datetime
+        now = datetime.now()
+        request_number = f"PR{now.strftime('%Y%m%d')}{now.microsecond//1000:03d}"
         
-#         # CRUD를 통하지 않고 직접 DB 객체 생성
-#         purchase_request = PurchaseRequest(**filtered_data)
-#         db.add(purchase_request)
-#         db.commit()
-#         db.refresh(purchase_request)
+        # 안전한 데이터 생성 (실제 DB 컬럼에만 매핑)
+        safe_data = {
+            'request_number': request_number,
+            'item_name': str(request_in['item_name']).strip(),
+            'specifications': request_in.get('specifications'),
+            'quantity': int(request_in['quantity']),
+            'unit': request_in.get('unit', '개'),
+            'estimated_unit_price': float(request_in.get('estimated_unit_price', 0)) if request_in.get('estimated_unit_price') else None,
+            'total_budget': float(request_in.get('total_budget', 0)) if request_in.get('total_budget') else None,
+            'currency': request_in.get('currency', 'KRW'),
+            'category': request_in.get('category', 'OTHER'),
+            'urgency': request_in.get('urgency', 'NORMAL'),
+            'purchase_method': request_in.get('purchase_method', 'DIRECT'),
+            'requester_name': str(request_in['requester_name']).strip(),
+            'requester_email': request_in.get('requester_email'),
+            'department': str(request_in['department']).strip(),
+            'position': request_in.get('position'),
+            'phone_number': request_in.get('phone_number'),
+            'project': request_in.get('project'),
+            'budget_code': request_in.get('budget_code'),
+            'cost_center': request_in.get('cost_center'),
+            'preferred_supplier': request_in.get('preferred_supplier'),
+            'supplier_contact': request_in.get('supplier_contact'),
+            'justification': str(request_in['justification']).strip(),
+            'business_case': request_in.get('business_case'),
+            'notes': request_in.get('notes'),
+            'status': 'SUBMITTED',
+            'request_date': now,
+        }
         
-#         return purchase_request
+        # expected_delivery_date 처리
+        if request_in.get('expected_delivery_date'):
+            try:
+                if isinstance(request_in['expected_delivery_date'], str):
+                    safe_data['expected_delivery_date'] = datetime.strptime(
+                        request_in['expected_delivery_date'], '%Y-%m-%d'
+                    ).date()
+                else:
+                    safe_data['expected_delivery_date'] = request_in['expected_delivery_date']
+            except ValueError:
+                print(f"⚠️ 잘못된 날짜 형식: {request_in['expected_delivery_date']}")
         
-#     except Exception as e:
-#         db.rollback()
-#         raise HTTPException(
-#             status_code=400,
-#             detail=f"구매 요청 생성에 실패했습니다: {str(e)}"
-#         )
+        # total_budget 자동 계산
+        if not safe_data['total_budget'] and safe_data['estimated_unit_price'] and safe_data['quantity']:
+            safe_data['total_budget'] = safe_data['estimated_unit_price'] * safe_data['quantity']
+        
+        print(f"📋 처리된 안전 데이터: {safe_data}")
+        
+        # None 값 제거 (선택사항)
+        filtered_data = {k: v for k, v in safe_data.items() if v is not None}
+        
+        # DB 객체 생성
+        purchase_request = DBPurchaseRequest(**filtered_data)
+        db.add(purchase_request)
+        db.commit()
+        db.refresh(purchase_request)
+        
+        print(f"✅ 구매 요청 생성 완료: ID={purchase_request.id}")
+        
+        return {
+            "success": True,
+            "message": "구매 요청이 성공적으로 생성되었습니다.",
+            "data": {
+                "id": purchase_request.id,
+                "request_number": purchase_request.request_number,
+                "item_name": purchase_request.item_name,
+                "status": purchase_request.status,
+                "total_budget": purchase_request.total_budget,
+                "department": purchase_request.department,
+                "requester_name": purchase_request.requester_name
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ 구매 요청 생성 실패: {e}")
+        import traceback
+        print(f"📋 스택 트레이스: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"구매 요청 생성에 실패했습니다: {str(e)}"
+        )
 
 @router.get("/stats", response_model=PurchaseRequestStats)
 def read_purchase_request_stats(db: Session = Depends(get_db)):

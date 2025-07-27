@@ -42,11 +42,13 @@ services:
       dockerfile: Dockerfile
     container_name: inventory-api
     restart: unless-stopped
+    user: "0:0"
     ports:
       - "8000:8000"
     volumes:
-      - ./uploads:/app/uploads
-      - ./logs/api:/app/logs
+      - ./uploads:/app/uploads:Z
+      - ./logs/api:/app/logs:Z
+      - ./server/app:/app/app
     environment:
       # 앱 설정
       - PROJECT_NAME=Inventory Management System

@@ -183,18 +183,20 @@ def update_unified_inventory_from_receipts(db: Session):
             }
             
             for receipt in receipts:
+                # SQLAlchemy 객체의 속성에 직접 접근
                 receipt_data = {
-                    "receipt_number": receipt.receipt_number,
-                    "item_name": receipt.item_name,
-                    "expected_quantity": receipt.expected_quantity,
+                    "receipt_number": receipt.receipt_number or "N/A",
+                    "item_name": receipt.item_name or item.item_name,
+                    "expected_quantity": receipt.expected_quantity or receipt.received_quantity,
                     "received_quantity": receipt.received_quantity,
                     "receiver_name": receipt.receiver_name,
                     "receiver_email": receipt.receiver_email,
                     "department": receipt.department,
-                    "received_date": receipt.received_date.isoformat(),
+                    "received_date": receipt.received_date.isoformat() if receipt.received_date else "",
                     "location": receipt.location,
-                    "condition": receipt.condition.value if hasattr(receipt.condition, 'value') else receipt.condition,
-                    "notes": receipt.notes
+                    "condition": receipt.condition.value if hasattr(receipt.condition, 'value') else str(receipt.condition),
+                    "notes": receipt.notes,
+                    "image_urls": []  # 이미지는 별도 테이블에서 관리
                 }
                 receipt_history.append(receipt_data)
                 

@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.core.config import settings
 from app.api.v1.api import api_router
@@ -41,9 +42,19 @@ if hasattr(settings, 'TRUSTED_HOSTS') and settings.TRUSTED_HOSTS:
         TrustedHostMiddleware, 
         allowed_hosts=settings.TRUSTED_HOSTS
     )
+    
+
+# 정적 파일 마운트
+
+uploads_dir = os.path.join(os.getcwd(), "uploads")
+if os.path.exists(uploads_dir):
+    app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+    
 
 # API 라우터 등록
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
 
 @app.get("/")
 async def root():

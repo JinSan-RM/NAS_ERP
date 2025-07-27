@@ -1,9 +1,9 @@
-// client/src/components/inventory/InventoryPage.tsx
+// client/src/components/inventory/InventoryPage.tsx - 수정된 버전
 import React, { useState, useMemo, useEffect } from 'react';
 import styled from 'styled-components';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'react-toastify';
-import { Plus, Download, Filter, RefreshCw, Edit, Trash2, Package } from 'lucide-react';
+import { Plus, Download, Filter, RefreshCw, Edit, Trash2, Package, X, ZoomIn, ZoomOut } from 'lucide-react';
 
 // Components
 import Table from '../common/Table';
@@ -14,10 +14,9 @@ import LoadingSpinner from '../common/LoadingSpinner';
 import Modal from '../common/Modal';
 import InventoryFilters from './InventoryFilters';
 import InventoryForm from './InventoryForm';
-import ReceiptModal from './ReceiptModal'; // 새로 만들 컴포넌트
+import ReceiptModal from './ReceiptModal';
 
-import { inventoryApi } from '../../services/api'; // API 서비스
-
+import { inventoryApi } from '../../services/api';
 
 // Services
 import api from '../../services/api';
@@ -51,6 +50,8 @@ interface InventoryItem {
   stock_status: 'normal' | 'low_stock' | 'out_of_stock' | 'overstocked';
   created_at: string;
   updated_at?: string;
+  image_urls?: string[];
+  main_image_url?: string;
 }
 
 interface ReceiptHistory {
@@ -63,11 +64,28 @@ interface ReceiptHistory {
   received_date: string;
   condition?: string;
   notes?: string;
-  image_url?: string;  // 새로 추가: 이미지 URL 필드 (백엔드에서 제공)
+  image_urls?: string[];
 }
 
 const Container = styled.div`
   padding: 20px;
+  
+  /* 🔥 테이블 세로 가운데 정렬 강제 적용 */
+  table {
+    td, th {
+      vertical-align: middle !important;
+      padding: 12px;
+    }
+    
+    tbody tr {
+      height: 80px; /* 행 높이를 고정하여 일관성 유지 */
+    }
+    
+    /* 호버 효과 개선 */
+    tbody tr:hover {
+      background-color: #f8fafc;
+    }
+  }
 `;
 
 const PageTitle = styled.h1`
@@ -121,19 +139,26 @@ const StatCard = styled(Card)<{ color?: string }>`
   }
 `;
 
-const StatusBadge = styled.span<{ isActive: boolean }>`
-  display: inline-block;
+// 🔥 수정: 수령 상태 표시를 위한 새로운 컴포넌트
+const ReceiptStatusBadge = styled.span<{ hasReceipts: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   padding: 4px 12px;
   border-radius: 12px;
   font-size: 0.85rem;
   font-weight: 500;
-  background: ${props => props.isActive ? '#10B98120' : '#EF444420'};
-  color: ${props => props.isActive ? '#10B981' : '#EF4444'};
+  background: ${props => props.hasReceipts ? '#10B98120' : '#F59E0B20'};
+  color: ${props => props.hasReceipts ? '#10B981' : '#F59E0B'};
 `;
 
 const ActionButtonGroup = styled.div`
   display: flex;
   gap: 5px;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 40px;
 `;
 
 const StockIndicator = styled.div<{ stockLevel: 'high' | 'medium' | 'low' | 'out' }>`
@@ -165,6 +190,7 @@ const QuantityInfo = styled.div`
   display: flex;
   flex-direction: column;
   gap: 2px;
+  justify-content: center;
   
   .main-quantity {
     font-weight: bold;
@@ -174,6 +200,187 @@ const QuantityInfo = styled.div`
   .sub-info {
     font-size: 0.8rem;
     color: #666;
+  }
+`;
+
+// 🔥 새로운: 이미지 미리보기 컴포넌트
+const ImagePreviewGrid = styled.div`
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  max-width: 300px;
+  align-items: center;
+  justify-content: center;
+  
+  .thumbnail {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid #e5e7eb;
+    transition: all 0.2s ease;
+    
+    &:hover {
+      transform: scale(1.05);
+      border-color: #3b82f6;
+      box-shadow: 0 2px 8px rgba(59, 130, 246, 0.2);
+    }
+  }
+  
+  .more-images {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    background: #f3f4f6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    color: #6b7280;
+    border: 1px solid #e5e7eb;
+  }
+  
+  .no-image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
+    background: #f9fafb;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    color: #9ca3af;
+    border: 1px dashed #d1d5db;
+  }
+`;
+
+// 기존 스타일 컴포넌트들 아래에 추가
+const ImageViewerModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+`;
+
+const ImageViewerContainer = styled.div`
+  position: relative;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
+const ImageViewerHeader = styled.div`
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  padding: 15px 20px;
+  background: #f8f9fa;
+  border-bottom: 1px solid #e9ecef;
+  
+  h3 {
+    margin: 0;
+    flex: 1;
+    font-size: 1.1rem;
+    color: #333;
+  }
+`;
+
+const ImageViewerControls = styled.div`
+  display: flex;
+  gap: 10px;
+  align-items: center;
+`;
+
+const ImageViewerContent = styled.div`
+  position: relative;
+  overflow: auto;
+  max-height: calc(90vh - 80px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8f9fa;
+`;
+
+const ViewerImage = styled.img<{ zoom: number }>`
+  max-width: 100%;
+  max-height: 100%;
+  transform: scale(${props => props.zoom});
+  transition: transform 0.2s ease;
+  cursor: ${props => props.zoom > 1 ? 'grab' : 'default'};
+  
+  &:active {
+    cursor: ${props => props.zoom > 1 ? 'grabbing' : 'default'};
+  }
+`;
+
+const ZoomButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: #f3f4f6;
+    border-color: #9ca3af;
+  }
+  
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
+
+const DownloadButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.2s;
+  
+  &:hover {
+    background: #2563eb;
+  }
+`;
+
+const CloseButton = styled.button`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-left: 10px;
+  
+  &:hover {
+    background: #f3f4f6;
+    border-color: #ef4444;
+    color: #ef4444;
   }
 `;
 
@@ -189,8 +396,11 @@ const InventoryPage: React.FC = () => {
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [isReceiptWithImagesModalOpen, setIsReceiptWithImagesModalOpen] = useState(false);
   const [selectedItemForReceipt, setSelectedItemForReceipt] = useState<InventoryItem | null>(null);
+  const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
+  const [selectedImageName, setSelectedImageName] = useState<string>('');
+  const [imageZoom, setImageZoom] = useState(1);
 
-  // 재고 목록 조회 (unified_inventory API 사용)
+  // 재고 목록 조회
   const { 
     data: inventoryData, 
     isLoading, 
@@ -211,51 +421,66 @@ const InventoryPage: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const highlightId = urlParams.get('highlight');
-    
-    if (highlightId) {
-      // 해당 품목을 하이라이트 표시
-      setTimeout(() => {
-        const element = document.querySelector(`[data-item-id="${highlightId}"]`);
-        if (element) {
-          element.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          element.classList.add('highlight-item');
-          
-          // 3초 후 하이라이트 제거
-          setTimeout(() => {
-            element.classList.remove('highlight-item');
-          }, 3000);
-        }
-      }, 500);
-      
-      // URL에서 파라미터 제거
-      window.history.replaceState({}, '', '/inventory');
-    }
-  }, []);
-
-  // 🔥 개선된 수령 추가 Mutation (이미지 포함)
+  // 🔥 수정: 수령 완료 처리 (이미지 포함) - FormData 방식으로 변경
   const addReceiptWithImagesMutation = useMutation({
-    mutationFn: ({ itemId, receiptData, images }: { 
+    mutationFn: async ({ itemId, receiptData, images }: { 
       itemId: number; 
       receiptData: any; 
       images: File[] 
-    }) => inventoryApi.completeReceiptWithImages(itemId, receiptData, images),
-    onSuccess: () => {
+    }) => {
+      const formData = new FormData();
+      
+      // 수령 데이터를 FormData에 추가
+      formData.append('received_quantity', receiptData.received_quantity.toString());
+      formData.append('receiver_name', receiptData.receiver_name);
+      if (receiptData.receiver_email) formData.append('receiver_email', receiptData.receiver_email);
+      formData.append('department', receiptData.department);
+      formData.append('received_date', receiptData.received_date);
+      if (receiptData.location) formData.append('location', receiptData.location);
+      formData.append('condition', receiptData.condition || 'good');
+      if (receiptData.notes) formData.append('notes', receiptData.notes);
+      
+      // 이미지 파일들 추가
+      images.forEach((image, index) => {
+        formData.append('images', image);
+      });
+      
+      // API 호출
+      const response = await fetch(`http://localhost:8000/api/v1/inventory/${itemId}/complete-receipt-with-images`, {
+        method: 'POST',
+        body: formData
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '수령 처리 중 오류가 발생했습니다.');
+      }
+      
+      return response.json();
+    },
+    onSuccess: (responseData, variables) => {
+      console.log('수령 완료 성공:', responseData);
+      
       queryClient.invalidateQueries({ queryKey: ['unified-inventory'] });
       queryClient.invalidateQueries({ queryKey: ['unified-inventory-stats'] });
+      
+      // 안전한 itemId 참조
+      if (variables?.itemId) {
+        queryClient.invalidateQueries({ queryKey: ['inventory-item', variables.itemId] });
+      }
+      
+      refetch();
       toast.success('🎉 수령이 완료되고 이미지가 업로드되었습니다!');
       setIsReceiptWithImagesModalOpen(false);
       setSelectedItemForReceipt(null);
     },
     onError: (error: any) => {
-      toast.error(error.response?.data?.message || '수령 처리 중 오류가 발생했습니다.');
+      console.error('수령 처리 오류:', error);
+      toast.error(error.message || '수령 처리 중 오류가 발생했습니다.');
     },
   });
 
-
-  // 품목 생성 Mutation
+  // 나머지 mutations (기존과 동일)
   const createItemMutation = useMutation({
     mutationFn: api.inventory.createItem,
     onSuccess: () => {
@@ -269,7 +494,6 @@ const InventoryPage: React.FC = () => {
     },
   });
 
-  // 품목 수정 Mutation
   const updateItemMutation = useMutation({
     mutationFn: ({ id, data }: { id: number; data: any }) => 
       api.inventory.updateItem(id, data),
@@ -284,7 +508,6 @@ const InventoryPage: React.FC = () => {
     },
   });
 
-  // 삭제 Mutation
   const deleteItemMutation = useMutation({
     mutationFn: api.inventory.deleteItem,
     onSuccess: () => {
@@ -297,7 +520,6 @@ const InventoryPage: React.FC = () => {
     },
   });
 
-  // 수령 추가 Mutation
   const addReceiptMutation = useMutation({
     mutationFn: ({ itemId, receiptData }: { itemId: number; receiptData: any }) =>
       api.inventory.addReceipt(itemId, receiptData),
@@ -313,7 +535,6 @@ const InventoryPage: React.FC = () => {
     },
   });
 
-  // Excel 내보내기 Mutation
   const exportMutation = useMutation({
     mutationFn: () => api.inventory.exportData(),
     onSuccess: (blob: Blob) => {
@@ -332,14 +553,42 @@ const InventoryPage: React.FC = () => {
     },
   });
 
+  // 🔥 수정: 수령 상태 판단 함수
+  const hasReceipts = (item: InventoryItem): boolean => {
+    // 1. receipt_history 배열 확인
+    const hasReceiptHistory = item.receipt_history && item.receipt_history.length > 0;
+    
+    // 2. last_received_date 확인
+    const hasLastReceived = Boolean(item.last_received_date);
+    
+    // 3. last_received_by 확인
+    const hasReceivedBy = Boolean(item.last_received_by);
+    
+    // 4. 총 수령량 확인
+    const hasTotalReceived = item.total_received && item.total_received > 0;
+    
+    // 어느 하나라도 있으면 수령 완료로 판단
+    const result = hasReceiptHistory || hasLastReceived || hasReceivedBy || hasTotalReceived;
+    
+    console.log(`품목 ${item.id} 수령 상태 확인:`, {
+      hasReceiptHistory,
+      hasLastReceived,
+      hasReceivedBy,
+      hasTotalReceived,
+      result,
+      receipt_history_length: item.receipt_history?.length || 0
+    });
+    
+    return result;
+  };
+
   // 재고 수준 계산
   const getStockLevel = (current: number, minimum: number): 'high' | 'medium' | 'low' | 'out' => {
-    // 🔥 안전한 숫자 변환
     const currentNum = Number(current) || 0;
     const minimumNum = Number(minimum) || 0;
     
     if (currentNum === 0) return 'out';
-    if (minimumNum === 0) return 'high'; // 최소재고가 0이면 높음으로
+    if (minimumNum === 0) return 'high';
     if (currentNum <= minimumNum) return 'low';
     if (currentNum <= minimumNum * 2) return 'medium';
     return 'high';
@@ -355,14 +604,91 @@ const InventoryPage: React.FC = () => {
       default: return '#6B7280';
     }
   };
+  const getFullImageUrl = (imageUrl) => {
+    if (!imageUrl) return null;
+    
+    // 이미 전체 URL인 경우
+    if (imageUrl.startsWith('http')) {
+      return imageUrl;
+    }
+    
+    // 상대 경로인 경우 전체 URL로 변환
+    return `http://localhost:8000${imageUrl}`;
+  };
+  const handleImageClick = (imageUrl: string, itemName: string, imageIndex: number) => {
+    setSelectedImageUrl(getFullImageUrl(imageUrl));
+    setSelectedImageName(`${itemName}_이미지_${imageIndex + 1}`);
+    setImageZoom(1);
+  };
 
-  // 테이블 컬럼 정의
+  // 이미지 다운로드 핸들러
+  const handleImageDownload = async () => {
+    if (!selectedImageUrl || !selectedImageName) return;
+    
+    try {
+      const response = await fetch(selectedImageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `${selectedImageName}.${getFileExtension(selectedImageUrl)}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('이미지가 다운로드되었습니다.');
+    } catch (error) {
+      console.error('다운로드 실패:', error);
+      toast.error('이미지 다운로드에 실패했습니다.');
+    }
+  };
+
+  // 파일 확장자 추출
+  const getFileExtension = (url: string): string => {
+    const match = url.match(/\.[^.]+$/);
+    return match ? match[0].slice(1) : 'jpg';
+  };
+
+  // 줌 컨트롤
+  const handleZoomIn = () => {
+    setImageZoom(prev => Math.min(prev + 0.25, 3));
+  };
+
+  const handleZoomOut = () => {
+    setImageZoom(prev => Math.max(prev - 0.25, 0.5));
+  };
+
+  // 모달 닫기
+  const handleCloseImageViewer = () => {
+    setSelectedImageUrl(null);
+    setSelectedImageName('');
+    setImageZoom(1);
+  };
+
+  // ESC 키로 모달 닫기
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        handleCloseImageViewer();
+      }
+    };
+
+    if (selectedImageUrl) {
+      document.addEventListener('keydown', handleKeyDown);
+      return () => document.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [selectedImageUrl]);
+
+  // 🔥 수정: 테이블 컬럼 정의 - 상태 표시 로직 변경
   const columns: TableColumn<InventoryItem>[] = useMemo(() => [
     {
       key: 'item_code',
       label: '품목코드',
       sortable: true,
-      width: '120px',
+      width: '160px',
+      style: { verticalAlign: 'middle' },
       render: (value) => (
         <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: '500' }}>
           {value}
@@ -373,6 +699,7 @@ const InventoryPage: React.FC = () => {
       key: 'item_name',
       label: '품목명',
       sortable: true,
+      style: { verticalAlign: 'middle' },
       render: (value, item) => (
         <div>
           <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{value}</div>
@@ -388,18 +715,19 @@ const InventoryPage: React.FC = () => {
       key: 'current_quantity',
       label: '재고 현황',
       sortable: true,
-      width: '160px',
+      width: '140px',
+      style: { verticalAlign: 'middle' },
       render: (value, item) => (
         <QuantityInfo>
           <div className="main-quantity" style={{ color: getStockStatusColor(item.stock_status) }}>
             현재: {value.toLocaleString()}
           </div>
-          <div className="sub-info">
+          {/* <div className="sub-info">
             총수령: {item.total_received?.toLocaleString() || 0}
-          </div>
-          <div className="sub-info">
+          </div> */}
+          {/* <div className="sub-info">
             최소: {item.minimum_stock?.toLocaleString() || 0}
-          </div>
+          </div> */}
         </QuantityInfo>
       ),
     },
@@ -407,10 +735,10 @@ const InventoryPage: React.FC = () => {
       key: 'unit_price',
       label: '단가',
       sortable: true,
-      width: '120px',
+      width: '160px',
       align: 'right',
+      style: { verticalAlign: 'middle' },
       render: (value, item) => {
-        // 🔥 null/undefined 체크 추가
         if (!value || value === 0) return '-';
         const currency = item.currency || '원';
         return `${currency} ${value.toLocaleString()}`;
@@ -419,99 +747,151 @@ const InventoryPage: React.FC = () => {
     {
       key: 'last_received_date',
       label: '최근수령일',
-      width: '110px',
+      width: '130px',
+      style: { verticalAlign: 'middle' },
       render: (value) => value ? new Date(value).toLocaleDateString('ko-KR') : '-',
     },
     {
-      key: 'image',
+      key: 'image_urls',
       label: '이미지',
-      width: '500px',
-      render: (value, item) => (
-        <div className="image-preview-grid">
-          {item.receipt_history?.slice(0, 3).map((receipt, index) => (
-            receipt.image_url ? (
+      width: '150px',
+      style: { verticalAlign: 'middle' },
+      render: (value, item) => {
+        const allImageUrls = [];
+        
+        if (item.main_image_url) {
+          allImageUrls.push(item.main_image_url);
+        }
+        
+        if (item.image_urls && item.image_urls.length > 0) {
+          item.image_urls.forEach(url => {
+            if (!allImageUrls.includes(url)) {
+              allImageUrls.push(url);
+            }
+          });
+        }
+        
+        const displayImages = allImageUrls.slice(0, 3);
+        
+        if (allImageUrls.length === 0) {
+          return (
+            <ImagePreviewGrid>
+              <div className="no-image">이미지 없음</div>
+            </ImagePreviewGrid>
+          );
+        }
+        
+        return (
+          <ImagePreviewGrid>
+            {displayImages.map((url, index) => (
               <img
                 key={index}
-                src={receipt.image_url}
-                alt={`Receipt ${index + 1}`}
+                src={getFullImageUrl(url)}
+                alt={`${item.item_name} ${index + 1}`}
                 className="thumbnail"
-                style={{ width: '100px', height: '100px', objectFit: 'cover', margin: '5px' }}
+                style={{ cursor: 'pointer' }} // 🔥 추가: 클릭 가능 표시
+                onClick={() => handleImageClick(url, item.item_name, index)} // 🔥 추가: 클릭 이벤트
+                onError={(e) => {
+                  console.error('이미지 로딩 실패:', url);
+                  (e.target as HTMLImageElement).style.display = 'none';
+                }}
               />
-            ) : (
-              <div key={index} className="no-image">이미지 없음</div>
-            )
-          ))}
-          {item.receipt_history?.length > 3 && (
-            <span className="more-images">+{item.receipt_history.length - 3}개</span>
-          )}
-        </div>
-      ),
+            ))}
+            {allImageUrls.length > 3 && (
+              <div className="more-images">+{allImageUrls.length - 3}</div>
+            )}
+          </ImagePreviewGrid>
+        );
+      },
     },
     {
-      key: 'is_active',
-      label: '상태',
-      width: '180px',
-      render: (value) => (
-        <StatusBadge isActive={value}>
-          {value ? '수령 완료' : '수령 대기'}
-        </StatusBadge>
+      key: 'receipt_status',
+      label: '수령 상태',
+      width: '120px',
+      style: { verticalAlign: 'middle' },
+      render: (_, item) => (
+        <ReceiptStatusBadge hasReceipts={hasReceipts(item)}>
+          {hasReceipts(item) ? '수령 완료' : '수령 대기'}
+        </ReceiptStatusBadge>
       ),
     },
     {
       key: 'actions',
       label: '관리',
-      width: '180px', // 폭 늘림
-      render: (_, item) => (
-        <ActionButtonGroup>
-          {/* 🔥 새로운 수령완료 버튼 (이미지 포함) */}
-          <Button
-            size="sm"
-            variant="success"
-            onClick={() => handleReceiptWithImages(item)}
-            title="수령완료 (이미지 포함)"
-            style={{
-              background: 'linear-gradient(135deg, #10b981, #059669)',
-              color: 'white',
-              fontWeight: '600'
-            }}
-          >
-            <Package size={14} />
-            수령완료
-          </Button>
-          
-          {/* 기존 수령 추가 버튼 */}
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleAddReceipt(item)}
-            title="간단 수령 추가"
-          >
-            <Package size={14} />
-          </Button>
-          
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => handleEdit(item)}
-            title="수정"
-          >
-            <Edit size={14} />
-          </Button>
-          
-          <Button
-            size="sm"
-            variant="danger"
-            onClick={() => handleDelete(item.id)}
-            title="삭제"
-          >
-            <Trash2 size={14} />
-          </Button>
-        </ActionButtonGroup>
-      ),
-    },
+      width: '180px',
+      style: { verticalAlign: 'middle' },
+      render: (_, item) => {
+        const itemHasReceipts = hasReceipts(item);
+        
+        return (
+          <ActionButtonGroup>
+            {/* 🔥 수정: !!를 사용하여 Boolean 변환 또는 && 대신 ? : 사용 */}
+            {!itemHasReceipts ? (
+              <Button
+                size="sm"
+                variant="success"
+                onClick={() => handleReceiptWithImages(item)}
+                title="수령완료 (이미지 포함)"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  fontWeight: '600'
+                }}
+              >
+                <Package size={14} />
+                수령
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled
+                title="수령 완료됨"
+                style={{
+                  background: '#f0fdf4',
+                  color: '#16a34a',
+                  border: '1px solid #16a34a'
+                }}
+              >
+                <Package size={14} />
+                완료됨  
+              </Button>
+            )}
+            
+            {/* 기존 수령 추가 버튼 (항상 표시) */}
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleAddReceipt(item)}
+              title="추가 수령"
+            >
+              <Package size={14} />
+            </Button>
+            
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleEdit(item)}
+              title="수정"
+            >
+              <Edit size={14} />
+            </Button>
+            
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => handleDelete(item.id)}
+              title="삭제"
+            >
+              <Trash2 size={14} />
+            </Button>
+          </ActionButtonGroup>
+        );
+      },
+    }
   ], []);
 
-  // 🔥 새로운 이벤트 핸들러들
+  // 이벤트 핸들러들
   const handleReceiptWithImages = (item: InventoryItem) => {
     setSelectedItemForReceipt(item);
     setIsReceiptWithImagesModalOpen(true);
@@ -527,7 +907,6 @@ const InventoryPage: React.FC = () => {
     }
   };
 
-  // 이벤트 핸들러
   const handleSearch = (searchFilters: SearchFilters) => {
     setFilters(searchFilters);
     setCurrentPage(1);
@@ -575,6 +954,8 @@ const InventoryPage: React.FC = () => {
     }
   };
 
+  
+  
   // 데이터 추출
   const items = inventoryData?.data?.items || [];
   const totalPages = inventoryData?.data?.pages || 0;
@@ -610,8 +991,8 @@ const InventoryPage: React.FC = () => {
           <p>전체 품목</p>
         </StatCard>
         <StatCard color="#10B981">
-          <h3>{items.filter(item => item.stock_status === 'normal').length}</h3>
-          <p>정상 재고</p>
+          <h3>{items.filter(item => hasReceipts(item)).length}</h3>
+          <p>수령 완료</p>
         </StatCard>
         <StatCard color="#F59E0B">
           <h3>{stats?.low_stock_items || 0}</h3>
@@ -686,47 +1067,106 @@ const InventoryPage: React.FC = () => {
         />
       </Modal>
 
-      {/* 🔥 CSS 스타일 추가 (하이라이트 효과) */}
-      <style jsx>{`
-        .highlight-item {
-          background: linear-gradient(135deg, #fef3c7, #fed7aa) !important;
-          border: 2px solid #f59e0b !important;
-          border-radius: 8px !important;
-          animation: highlight-pulse 1s ease-in-out 3;
-        }
-        
-        @keyframes highlight-pulse {
-          0%, 100% { transform: scale(1); }
-          50% { transform: scale(1.02); }
-        }
-      `}</style>
-
-      {/* 🔥 새로운 수령완료 모달 (이미지 포함) */}
-      <ReceiptModal
-        item={selectedItemForReceipt}
-        isOpen={isReceiptWithImagesModalOpen}
-        onClose={() => {
-          setIsReceiptWithImagesModalOpen(false);
-          setSelectedItemForReceipt(null);
-        }}
-        onSubmit={handleReceiptWithImagesSubmit}
-        loading={addReceiptWithImagesMutation.isPending}
-      />
+      {/* 🔥 수령완료 모달 (이미지 포함) */}
+      {isReceiptWithImagesModalOpen && selectedItemForReceipt && (
+        <Modal
+          isOpen={isReceiptWithImagesModalOpen}
+          onClose={() => {
+            setIsReceiptWithImagesModalOpen(false);
+            setSelectedItemForReceipt(null);
+          }}
+          title={`수령완료 - ${selectedItemForReceipt.item_name}`}
+          size="lg"
+        >
+          <ReceiptModal
+            item={selectedItemForReceipt}
+            onSubmit={handleReceiptWithImagesSubmit}
+            onCancel={() => {
+              setIsReceiptWithImagesModalOpen(false);
+              setSelectedItemForReceipt(null);
+            }}
+            loading={addReceiptWithImagesMutation.isPending}
+            requireImages={true}
+          />
+        </Modal>
+      )}
 
       {/* 수령 추가 모달 */}
-      <Modal
-        isOpen={isReceiptModalOpen}
-        onClose={() => setIsReceiptModalOpen(false)}
-        title={`수령 추가 - ${selectedItem?.item_name}`}
-        size="lg"
-      >
-        <ReceiptModal
-          item={selectedItem}
-          onSubmit={handleReceiptSubmit}
-          onCancel={() => setIsReceiptModalOpen(false)}
-          loading={addReceiptMutation.isPending}
-        />
-      </Modal>
+      {isReceiptModalOpen && selectedItem && (
+        <Modal
+          isOpen={isReceiptModalOpen}
+          onClose={() => setIsReceiptModalOpen(false)}
+          title={`수령 추가 - ${selectedItem.item_name}`}
+          size="lg"
+        >
+          <ReceiptModal
+            item={selectedItem}
+            onSubmit={handleReceiptSubmit}
+            onCancel={() => setIsReceiptModalOpen(false)}
+            loading={addReceiptMutation.isPending}
+            requireImages={false}
+          />
+        </Modal>
+      )}
+      {/* 🔥 이미지 뷰어 모달 */}
+      {selectedImageUrl && (
+        <ImageViewerModal onClick={handleCloseImageViewer}>
+          <ImageViewerContainer onClick={(e) => e.stopPropagation()}>
+            <ImageViewerHeader>
+              <h3>{selectedImageName}</h3>
+              <ImageViewerControls>
+                <ZoomButton
+                  onClick={handleZoomOut}
+                  disabled={imageZoom <= 0.5}
+                  title="축소"
+                >
+                  <ZoomOut size={16} />
+                </ZoomButton>
+                
+                <span style={{ 
+                  fontSize: '0.9rem', 
+                  color: '#666',
+                  minWidth: '60px',
+                  textAlign: 'center'
+                }}>
+                  {Math.round(imageZoom * 100)}%
+                </span>
+                
+                <ZoomButton
+                  onClick={handleZoomIn}
+                  disabled={imageZoom >= 3}
+                  title="확대"
+                >
+                  <ZoomIn size={16} />
+                </ZoomButton>
+                
+                <DownloadButton
+                  onClick={handleImageDownload}
+                  title="이미지 다운로드"
+                >
+                  <Download size={16} />
+                  다운로드
+                </DownloadButton>
+                
+                <CloseButton
+                  onClick={handleCloseImageViewer}
+                  title="닫기"
+                >
+                  <X size={16} />
+                </CloseButton>
+              </ImageViewerControls>
+            </ImageViewerHeader>
+            
+            <ImageViewerContent>
+              <ViewerImage
+                src={selectedImageUrl}
+                alt={selectedImageName}
+                zoom={imageZoom}
+              />
+            </ImageViewerContent>
+          </ImageViewerContainer>
+        </ImageViewerModal>
+      )}
     </Container>
   );
 };

@@ -1,429 +1,588 @@
-// client/src/components/inventory/ReceiptWithImagesModal.tsx - 새로 생성할 컴포넌트
-import React, { useState } from 'react';
+// client/src/components/inventory/ReceiptModal.tsx - 수정된 버전
+import React, { useState, useRef } from 'react';
 import styled from 'styled-components';
-import { Upload, X, Image as ImageIcon, CheckCircle } from 'lucide-react';
+import { Upload, X, ChevronDown } from 'lucide-react';
 import Button from '../common/Button';
-import Input from '../common/Input';
-import Select from '../common/Select';
-import Modal from '../common/Modal';
 
-const ModalContent = styled.div`
+const FormContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
   padding: 20px;
-  max-height: 80vh;
-  overflow-y: auto;
+  min-height: 400px;
+  background: white;
+`;
+
+const Title = styled.h3`
+  margin: 0 0 20px 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #374151;
 `;
 
 const FormGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 16px;
-  margin-bottom: 20px;
 `;
 
-const ImageUploadSection = styled.div`
-  margin: 20px 0;
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const ButtonGroup = styled.div`
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e5e7eb;
+`;
+
+// 🔥 부서 선택을 위한 Select 컴포넌트 스타일
+const SelectContainer = styled.div`
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const SelectLabel = styled.label`
+  font-size: 14px;
+  font-weight: 500;
+  color: #374151;
+`;
+
+const SelectButton = styled.button<{ isOpen: boolean; hasError?: boolean }>`
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid ${props => props.hasError ? '#ef4444' : '#d1d5db'};
+  border-radius: 4px;
+  background: white;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  transition: all 0.2s ease;
   
-  .upload-title {
-    font-weight: 600;
-    margin-bottom: 12px;
-    color: #1f2937;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+  &:hover {
+    border-color: ${props => props.hasError ? '#ef4444' : '#3b82f6'};
+  }
+  
+  &:focus {
+    outline: none;
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px #3b82f6;
+  }
+  
+  .placeholder {
+    color: #9ca3af;
+  }
+  
+  .chevron {
+    transform: ${props => props.isOpen ? 'rotate(180deg)' : 'rotate(0deg)'};
+    transition: transform 0.2s ease;
+    color: #6b7280;
   }
 `;
 
-const ImageUploadArea = styled.div<{ isDragOver: boolean }>`
-  border: 2px dashed ${props => props.isDragOver ? '#3b82f6' : '#d1d5db'};
-  border-radius: 12px;
-  padding: 40px 20px;
-  text-align: center;
-  background: ${props => props.isDragOver ? '#eff6ff' : '#f9fafb'};
-  transition: all 0.3s ease;
+const DropdownMenu = styled.div<{ isOpen: boolean }>`
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: white;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  display: ${props => props.isOpen ? 'block' : 'none'};
+  
+  /* 스크롤바 스타일링 */
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+  
+  &::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  
+  &::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+  }
+  
+  &::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+`;
+
+const OptionItem = styled.div<{ isSelected: boolean }>`
+  padding: 8px 12px;
   cursor: pointer;
+  font-size: 14px;
+  background: ${props => props.isSelected ? '#3b82f6' : 'white'};
+  color: ${props => props.isSelected ? 'white' : '#374151'};
+  border-bottom: 1px solid #f3f4f6;
+  
+  &:last-child {
+    border-bottom: none;
+  }
+  
+  &:hover {
+    background: ${props => props.isSelected ? '#3b82f6' : '#f8fafc'};
+  }
+`;
+
+// 간단한 이미지 업로드 섹션
+const ImageUploadSection = styled.div`
+  border: 2px dashed #d1d5db;
+  border-radius: 8px;
+  padding: 20px;
+  text-align: center;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: all 0.2s ease;
   
   &:hover {
     border-color: #3b82f6;
     background: #eff6ff;
   }
-  
-  .upload-icon {
-    margin-bottom: 12px;
-    color: #6b7280;
-  }
-  
-  .upload-text {
-    color: #374151;
-    margin-bottom: 8px;
-  }
-  
-  .upload-hint {
-    color: #6b7280;
-    font-size: 12px;
-  }
 `;
 
 const ImagePreviewGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
   gap: 12px;
   margin-top: 16px;
 `;
 
 const ImagePreviewItem = styled.div`
   position: relative;
-  background: #f3f4f6;
   border-radius: 8px;
   overflow: hidden;
+  border: 1px solid #e5e7eb;
   aspect-ratio: 1;
   
-  img {
+  .preview-image {
     width: 100%;
     height: 100%;
     object-fit: cover;
   }
   
-  .remove-btn {
+  .remove-button {
     position: absolute;
     top: 4px;
     right: 4px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
     background: rgba(239, 68, 68, 0.9);
     color: white;
     border: none;
-    border-radius: 50%;
-    width: 24px;
-    height: 24px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    
-    &:hover {
-      background: rgba(239, 68, 68, 1);
-    }
+    font-size: 12px;
   }
 `;
 
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-top: 30px;
-  padding-top: 20px;
-  border-top: 1px solid #e5e7eb;
-`;
+// 🔥 부서 옵션 (PurchaseRequestForm과 동일)
+const DEPARTMENT_OPTIONS = [
+  { value: 'H/W 개발팀', label: 'H/W 개발팀' },
+  { value: 'S/W 개발팀', label: 'S/W 개발팀' },
+  { value: '총무부', label: '총무부' },
+  { value: '사무관리팀', label: '사무관리팀' },
+  { value: '영업팀', label: '영업팀' },
+];
 
-const HiddenInput = styled.input`
-  display: none;
-`;
-
-interface ReceiptWithImagesModalProps {
+interface ReceiptModalProps {
   item: any;
-  isOpen: boolean;
-  onClose: () => void;
-  onSubmit: (receiptData: any, images: File[]) => void;
+  onSubmit: (receiptData: any, images?: File[]) => void;
+  onCancel: () => void;
   loading?: boolean;
+  requireImages?: boolean;
 }
 
-const ReceiptWithImagesModal: React.FC<ReceiptWithImagesModalProps> = ({
+const ReceiptModal: React.FC<ReceiptModalProps> = ({
   item,
-  isOpen,
-  onClose,
   onSubmit,
-  loading = false
+  onCancel,
+  loading = false,
+  requireImages = false
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const departmentSelectRef = useRef<HTMLDivElement>(null);
+  
+  // 부서 선택 관련 상태
+  const [isDepartmentOpen, setIsDepartmentOpen] = useState(false);
+  
+  // 기본 폼 데이터
   const [formData, setFormData] = useState({
-    received_quantity: item?.current_quantity || 1,
+    received_quantity: 1,
     receiver_name: '',
     receiver_email: '',
     department: '',
     received_date: new Date().toISOString().split('T')[0],
-    location: item?.location || '',
+    location: '',
     condition: 'good',
-    notes: item?.notes || '',  // 빈 문자열로 기본
-    receipt_number: '',  // 새로 추가: 초기값 빈 문자열
-    expected_quantity: item?.current_quantity || 1,
-
+    notes: ''
   });
 
-  const [images, setImages] = useState<File[]>([]);
-  const [dragOver, setDragOver] = useState(false);
-  const [imagePreviews, setImagePreviews] = useState<string[]>([]);
+  // 이미지 관련 상태
+  const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (images.length === 0) {
-        alert('이미지는 필수입니다. 최소 1개의 이미지를 업로드해주세요.');
-        return;
-    }
-
-    const receiptData = {
-      receipt_number: formData.receipt_number || `REC-${new Date().toISOString().replace(/[-:T.]/g, '').slice(0, 15)}`,
-      received_quantity: Number(formData.received_quantity) || 1,
-      receiver_name: formData.receiver_name.trim() || '', 
-      receiver_email: formData.receiver_email?.trim() || '',
-      department: formData.department || '',
-      received_date: formData.received_date || new Date().toISOString().split('T')[0],
-      location: formData.location?.trim() || '',
-      condition: formData.condition || 'good',
-      notes: formData.notes?.trim() || '',
-      item_name: item.item_name,  // 새로 추가: item에서 가져옴 (필수 필드 충족)
-      expected_quantity: Number(formData.expected_quantity) || 1,  // 새로 추가: 예상 수량
+  // 외부 클릭 감지 (부서 선택용)
+  React.useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (departmentSelectRef.current && !departmentSelectRef.current.contains(event.target as Node)) {
+        setIsDepartmentOpen(false);
+      }
     };
 
-    // 유효성 체크
-    if (!receiptData.receiver_name || receiptData.received_quantity < 1 || !receiptData.department || !receiptData.received_date || !receiptData.item_name || receiptData.expected_quantity < 1) {
-        alert('필수 필드를 확인하세요: 수령자명, 수량, 부서, 수령일, 품목명, 예상 수량');
-        return;
-    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
-    onSubmit(receiptData, images);
+  const handleInputChange = (field: string, value: any) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleImageUpload = (files: File[]) => {
-    const newImages = [...images, ...files];
-    setImages(newImages);
-    
-    // 미리보기 생성
-    const newPreviews = [...imagePreviews];
-    files.forEach(file => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        newPreviews.push(e.target?.result as string);
-        setImagePreviews([...newPreviews]);
-      };
-      reader.readAsDataURL(file);
-    });
+  // 🔥 부서 선택 핸들러
+  const handleDepartmentSelect = (departmentValue: string) => {
+    handleInputChange('department', departmentValue);
+    setIsDepartmentOpen(false);
   };
 
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
+  const handleDepartmentToggle = () => {
+    setIsDepartmentOpen(!isDepartmentOpen);
+  };
+
+  // 이미지 처리 함수들
+  const handleFileSelect = (files: FileList | null) => {
+    if (!files) return;
     
-    const files = Array.from(e.dataTransfer.files).filter(file => 
+    const imageFiles = Array.from(files).filter(file => 
       file.type.startsWith('image/')
     );
     
-    if (files.length > 0) {
-      handleImageUpload(files);
-    }
+    setSelectedImages(prev => [...prev, ...imageFiles]);
+    
+    // 미리보기 URL 생성
+    const newPreviewUrls = imageFiles.map(file => URL.createObjectURL(file));
+    setImagePreviewUrls(prev => [...prev, ...newPreviewUrls]);
   };
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    handleImageUpload(files);
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    handleFileSelect(e.target.files);
   };
 
   const removeImage = (index: number) => {
-    const newImages = images.filter((_, i) => i !== index);
-    const newPreviews = imagePreviews.filter((_, i) => i !== index);
-    setImages(newImages);
-    setImagePreviews(newPreviews);
+    URL.revokeObjectURL(imagePreviewUrls[index]);
+    setSelectedImages(prev => prev.filter((_, i) => i !== index));
+    setImagePreviewUrls(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    // 이미지 필수 체크
+    if (requireImages && selectedImages.length === 0) {
+      alert('이미지는 필수입니다. 최소 1개의 이미지를 업로드해주세요.');
+      return;
+    }
+    
+    // 필수 필드 체크
+    if (!formData.receiver_name || !formData.department) {
+      alert('수령자명과 부서는 필수 입력 항목입니다.');
+      return;
+    }
+    
+    onSubmit(formData, selectedImages);
   };
 
   const conditionOptions = [
-    { value: 'excellent', label: '우수' },
+    { value: 'excellent', label: '최상' },
     { value: 'good', label: '양호' },
     { value: 'damaged', label: '손상' },
-    { value: 'defective', label: '불량' },
+    { value: 'defective', label: '불량' }
   ];
 
-  const departmentOptions = [
-    { value: 'H/W 개발팀', label: 'H/W 개발팀' },
-    { value: 'S/W 개발팀', label: 'S/W 개발팀' },
-    { value: '총무부', label: '총무부' },
-    { value: '사무관리팀', label: '사무관리팀' },
-    { value: '영업팀', label: '영업팀' },
-    { value: '인사팀', label: '인사팀' },
-  ];
-
-  if (!item) return null;
+  // 디버깅: 렌더링 확인
+  if (!item) {
+    return (
+      <FormContainer>
+        <div>아이템 정보를 불러올 수 없습니다.</div>
+      </FormContainer>
+    );
+  }
 
   return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title={`수령 완료 처리 - ${item.item_name}`}
-      size="xl"
-    >
-      <ModalContent>
-        <form onSubmit={handleSubmit}>
-          {/* 기본 수령 정보 - receipt_number 입력 필드 추가 */}
-          <FormGrid>
-            <Input
-              label="수령 번호 (선택, 자동 생성)"
-              type="text"
-              value={formData.receipt_number}
-              onChange={(e) => setFormData(prev => ({ ...prev, receipt_number: e.target.value }))}
-              placeholder="직접 입력 시 사용"
-            />
-            <Input
-              label="수량 *"
-              type="number"
-              value={formData.expected_quantity}
-              onChange={(e) => setFormData(prev => ({ ...prev, expected_quantity: parseInt(e.target.value) || 1 }))}
-              required
-              min="1"
-            />
+    <FormContainer>
+      <Title>
+        {requireImages ? '수령 완료' : '수령 추가'} - {item.item_name}
+      </Title>
 
-            <Input
-              label="수령자명 *"
+      {requireImages && (
+        <div style={{ 
+          padding: '12px 16px', 
+          background: '#fef3c7', 
+          border: '1px solid #f59e0b', 
+          borderRadius: '6px',
+          color: '#92400e',
+          fontSize: '0.875rem',
+          marginBottom: '16px'
+        }}>
+          ⚠️ 수령 완료를 위해 이미지 업로드가 필수입니다.
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        {/* 기본 수령 정보 */}
+        <FormGrid>
+          <FormGroup>
+            <label>수령 수량 *</label>
+            <input
+              type="number"
+              value={formData.received_quantity}
+              onChange={(e) => handleInputChange('received_quantity', parseInt(e.target.value) || 1)}
+              min="1"
+              required
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
+            />
+          </FormGroup>
+
+          <FormGroup>
+            <label>수령자명 *</label>
+            <input
               type="text"
               value={formData.receiver_name}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                receiver_name: e.target.value 
-              }))}
+              onChange={(e) => handleInputChange('receiver_name', e.target.value)}
               placeholder="수령자명을 입력하세요"
               required
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
             />
+          </FormGroup>
 
-            <Input
-              label="수령자 이메일"
+          <FormGroup>
+            <label>수령자 이메일</label>
+            <input
               type="email"
               value={formData.receiver_email}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                receiver_email: e.target.value 
-              }))}
-              placeholder="수령자 이메일을 입력하세요"
+              onChange={(e) => handleInputChange('receiver_email', e.target.value)}
+              placeholder="이메일을 입력하세요"
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
             />
+          </FormGroup>
 
-            <Select
-              label="부서 *"
-              value={formData.department}
-              options={departmentOptions}
-              onChange={(value) => setFormData(prev => ({ 
-                ...prev, 
-                department: value 
-              }))}
-              required
-            />
+          {/* 🔥 부서 선택 드롭다운 */}
+          <FormGroup>
+            <SelectContainer ref={departmentSelectRef}>
+              <SelectLabel>
+                부서 *
+              </SelectLabel>
+              
+              <SelectButton
+                type="button"
+                isOpen={isDepartmentOpen}
+                onClick={handleDepartmentToggle}
+              >
+                <span className={formData.department ? '' : 'placeholder'}>
+                  {formData.department || '부서를 선택하세요'}
+                </span>
+                <ChevronDown size={16} className="chevron" />
+              </SelectButton>
 
-            <Input
-              label="수령일 *"
+              <DropdownMenu isOpen={isDepartmentOpen}>
+                {DEPARTMENT_OPTIONS.map((dept) => (
+                  <OptionItem
+                    key={dept.value}
+                    isSelected={formData.department === dept.value}
+                    onClick={() => handleDepartmentSelect(dept.value)}
+                  >
+                    {dept.label}
+                  </OptionItem>
+                ))}
+              </DropdownMenu>
+            </SelectContainer>
+          </FormGroup>
+
+          <FormGroup>
+            <label>수령일 *</label>
+            <input
               type="date"
               value={formData.received_date}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                received_date: e.target.value 
-              }))}
+              onChange={(e) => handleInputChange('received_date', e.target.value)}
               required
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
             />
+          </FormGroup>
 
-            <Select
-              label="품목 상태 *"
-              value={formData.condition}
-              options={conditionOptions}
-              onChange={(value) => setFormData(prev => ({ 
-                ...prev, 
-                condition: value 
-              }))}
-              required
+          <FormGroup>
+            <label>수령 위치</label>
+            <input
+              type="text"
+              value={formData.location}
+              onChange={(e) => handleInputChange('location', e.target.value)}
+              placeholder="수령 위치를 입력하세요"
+              style={{
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '4px',
+                fontSize: '14px'
+              }}
             />
-          </FormGrid>
+          </FormGroup>
+        </FormGrid>
 
-          <Input
-            label="수령 위치"
-            type="text"
-            value={formData.location}
-            onChange={(e) => setFormData(prev => ({ 
-              ...prev, 
-              location: e.target.value 
-            }))}
-            placeholder="수령 위치를 입력하세요"
+        <FormGroup>
+          <label>품목 상태</label>
+          <select
+            value={formData.condition}
+            onChange={(e) => handleInputChange('condition', e.target.value)}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '4px',
+              fontSize: '14px'
+            }}
+          >
+            {conditionOptions.map(option => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </FormGroup>
+
+        <FormGroup>
+          <label>비고</label>
+          <textarea
+            value={formData.notes}
+            onChange={(e) => handleInputChange('notes', e.target.value)}
+            placeholder="추가 메모사항을 입력하세요"
+            rows={3}
+            style={{
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '4px',
+              fontSize: '14px',
+              resize: 'vertical'
+            }}
           />
+        </FormGroup>
 
-          {/* 이미지 업로드 섹션 */}
-          <ImageUploadSection>
-            <div className="upload-title">
-              <ImageIcon size={20} />
-              수령 이미지 업로드 ({images.length}/5)
+        {/* 이미지 업로드 섹션 */}
+        <FormGroup>
+          <label>
+            수령 이미지 {requireImages && <span style={{ color: '#ef4444' }}>*</span>}
+          </label>
+          
+          <ImageUploadSection onClick={() => fileInputRef.current?.click()}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+              <Upload size={32} style={{ color: '#6b7280' }} />
+              <div style={{ fontSize: '16px', fontWeight: '500' }}>
+                이미지를 클릭하여 선택하세요
+              </div>
+              <div style={{ fontSize: '14px', color: '#6b7280' }}>
+                JPG, PNG 파일 지원 (최대 10MB)
+              </div>
             </div>
             
-            <ImageUploadArea
-              isDragOver={dragOver}
-              onDrop={handleDrop}
-              onDragOver={(e) => {
-                e.preventDefault();
-                setDragOver(true);
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onClick={() => document.getElementById('image-input')?.click()}
-            >
-              <Upload size={48} className="upload-icon" />
-              <div className="upload-text">
-                이미지를 여기에 끌어다 놓거나 클릭하여 선택하세요
-              </div>
-              <div className="upload-hint">
-                PNG, JPG, JPEG 파일만 지원 (최대 5개, 각 10MB 이하)
-              </div>
-            </ImageUploadArea>
-
-            <HiddenInput
-              id="image-input"
+            <input
+              ref={fileInputRef}
               type="file"
               accept="image/*"
               multiple
-              onChange={handleFileSelect}
+              onChange={handleFileInputChange}
+              style={{ display: 'none' }}
             />
-
-            {/* 이미지 미리보기 */}
-            {imagePreviews.length > 0 && (
-              <ImagePreviewGrid>
-                {imagePreviews.map((preview, index) => (
-                  <ImagePreviewItem key={index}>
-                    <img src={preview} alt={`수령 이미지 ${index + 1}`} />
-                    <button
-                      type="button"
-                      className="remove-btn"
-                      onClick={() => removeImage(index)}
-                    >
-                      <X size={12} />
-                    </button>
-                  </ImagePreviewItem>
-                ))}
-              </ImagePreviewGrid>
-            )}
           </ImageUploadSection>
 
-          {/* 비고 */}
-          <Input
-            label="비고"
-            type="textarea"
-            value={formData.notes}
-            onChange={(e) => setFormData(prev => ({ 
-              ...prev, 
-              notes: e.target.value 
-            }))}
-            placeholder="추가 메모사항을 입력하세요"
-            rows={3}
-          />
+          {/* 이미지 미리보기 */}
+          {selectedImages.length > 0 && (
+            <ImagePreviewGrid>
+              {imagePreviewUrls.map((url, index) => (
+                <ImagePreviewItem key={index}>
+                  <img src={url} alt={`Preview ${index + 1}`} className="preview-image" />
+                  <button
+                    type="button"
+                    className="remove-button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      removeImage(index);
+                    }}
+                    title="이미지 제거"
+                  >
+                    ×
+                  </button>
+                </ImagePreviewItem>
+              ))}
+            </ImagePreviewGrid>
+          )}
 
-          <ButtonGroup>
-            <Button 
-              type="button" 
-              variant="secondary" 
-              onClick={onClose}
-              disabled={loading}
-            >
-              취소
-            </Button>
-            <Button 
-              type="submit" 
-              variant="primary"
-              loading={loading}
-              disabled={loading}
-            >
-              <CheckCircle size={16} />
-              수령 완료 처리
-            </Button>
-          </ButtonGroup>
-        </form>
-      </ModalContent>
-    </Modal>
+          {selectedImages.length > 0 && (
+            <div style={{ marginTop: '8px', fontSize: '14px', color: '#6b7280' }}>
+              {selectedImages.length}개 이미지 선택됨
+            </div>
+          )}
+        </FormGroup>
+
+        <ButtonGroup>
+          <Button 
+            type="button" 
+            variant="secondary" 
+            onClick={onCancel}
+            disabled={loading}
+          >
+            취소
+          </Button>
+          <Button 
+            type="submit" 
+            variant="primary"
+            disabled={loading || (requireImages && selectedImages.length === 0)}
+            style={{
+              opacity: loading || (requireImages && selectedImages.length === 0) ? 0.5 : 1,
+              cursor: loading || (requireImages && selectedImages.length === 0) ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {loading ? '처리 중...' : (requireImages ? '수령 완료' : '수령 추가')}
+          </Button>
+        </ButtonGroup>
+      </form>
+    </FormContainer>
   );
 };
 
-export default ReceiptWithImagesModal;
+export default ReceiptModal;

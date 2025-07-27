@@ -1,38 +1,45 @@
-# server/app/schemas/unified_inventory.py - LOG 관련 스키마 제거
+# server/app/schemas/unified_inventory.py - 빠른 수정 버전
+
 from datetime import datetime
 from typing import Optional, List, Dict, Any
 from pydantic import BaseModel, Field, ConfigDict
 
-# 수령 이력 스키마 (단순화)
+# 🔥 빠른 해결: received_date를 문자열로 변경
 class ReceiptHistoryBase(BaseModel):
-    receipt_number: str = Field(..., max_length=50, description="수령 번호")
-    item_name: str = Field(..., max_length=200, description="품목명")
-    expected_quantity: int = Field(..., ge=1, description="예상 수량")
+    receipt_number: Optional[str] = Field(None, max_length=50, description="수령 번호")
+    item_name: Optional[str] = Field(None, max_length=200, description="품목명") 
+    expected_quantity: Optional[int] = Field(None, ge=0, description="예상 수량")
+    item_code: Optional[str] = Field(None, max_length=50, description="품목 코드")
     received_quantity: int = Field(..., ge=0, description="수령 수량")
     receiver_name: str = Field(..., max_length=100, description="수령자명")
     receiver_email: Optional[str] = Field(None, max_length=255, description="수령자 이메일")
     department: str = Field(..., max_length=100, description="부서")
-    received_date: datetime = Field(..., description="수령일")
+    received_date: str = Field(..., description="수령일 (YYYY-MM-DD 또는 ISO 형식)")  # 🔥 문자열로 변경
     location: Optional[str] = Field(None, max_length=200, description="수령 위치")
     condition: Optional[str] = Field(None, max_length=50, description="품목 상태")
     notes: Optional[str] = Field(None, description="비고")
+    image_urls: Optional[List[str]] = Field(default=[], description="이미지 URL 목록")
 
-class ReceiptHistoryCreate(ReceiptHistoryBase):
-    receipt_number: Optional[str] = None
-    received_quantity: int
-    receiver_name: str
-    receiver_email: Optional[str] = None
-    department: str
-    received_date: str
-    location: Optional[str] = None
-    condition: Optional[str] = 'good'
-    notes: Optional[str] = None
-    image_urls: Optional[List[str]] = None  # 새로 추가: 이미지 URL 배열
+class ReceiptHistoryCreate(BaseModel):
+    received_quantity: int = Field(..., ge=1, description="수령 수량")
+    receiver_name: str = Field(..., max_length=100, description="수령자명")
+    receiver_email: Optional[str] = Field(None, max_length=255, description="수령자 이메일")
+    department: str = Field(..., max_length=100, description="부서")
+    received_date: str = Field(..., description="수령일 (ISO 형식 또는 YYYY-MM-DD)")
+    location: Optional[str] = Field(None, max_length=200, description="수령 위치")
+    condition: Optional[str] = Field('good', max_length=50, description="품목 상태")
+    notes: Optional[str] = Field(None, description="비고")
+    image_urls: Optional[List[str]] = Field(default=[], description="이미지 URL 목록")
 
 class ReceiptHistoryInDB(ReceiptHistoryBase):
+    id: Optional[int] = Field(None, description="수령 이력 ID")
+    created_at: Optional[str] = Field(None, description="생성일시 (ISO 형식)")  # 🔥 문자열로 변경
+    is_complete: Optional[bool] = Field(True, description="완료 여부")
+    quality_check_passed: Optional[bool] = Field(True, description="품질 검사 통과")
+    
     model_config = ConfigDict(from_attributes=True)
 
-# 기본 스키마
+# 나머지 스키마는 동일하게 유지...
 class UnifiedInventoryBase(BaseModel):
     item_name: str = Field(..., max_length=200, description="품목명")
     category: Optional[str] = Field(None, max_length=100, description="카테고리")
@@ -53,12 +60,10 @@ class UnifiedInventoryBase(BaseModel):
     notes: Optional[str] = Field(None, description="비고")
     tags: List[str] = Field(default=[], description="태그")
 
-# 생성용 스키마
 class UnifiedInventoryCreate(UnifiedInventoryBase):
     item_code: str = Field(..., max_length=50, description="품목 코드")
     receipt_history: Optional[List[ReceiptHistoryCreate]] = Field(default=[], description="수령 이력")
 
-# 업데이트용 스키마
 class UnifiedInventoryUpdate(BaseModel):
     item_name: Optional[str] = Field(None, max_length=200, description="품목명")
     category: Optional[str] = Field(None, max_length=100, description="카테고리")
@@ -78,7 +83,6 @@ class UnifiedInventoryUpdate(BaseModel):
     notes: Optional[str] = Field(None, description="비고")
     tags: Optional[List[str]] = Field(None, description="태그")
 
-# 수량 업데이트용 (단순화)
 class InventoryQuantityUpdate(BaseModel):
     quantity_change: int = Field(..., description="변경할 수량 (양수: 입고, 음수: 출고)")
     user_name: str = Field(..., description="처리자명")
@@ -86,7 +90,6 @@ class InventoryQuantityUpdate(BaseModel):
     purpose: Optional[str] = Field(None, description="사용 목적")
     notes: Optional[str] = Field(None, description="비고")
 
-# 응답용 스키마
 class UnifiedInventoryInDB(UnifiedInventoryBase):
     id: int
     item_code: str
@@ -112,9 +115,8 @@ class UnifiedInventoryInDB(UnifiedInventoryBase):
     is_low_stock: bool = Field(description="재고 부족 여부")
     stock_status: str = Field(description="재고 상태")
     model_config = ConfigDict(from_attributes=True)
-    
-#
-# 이미지 관련 스키마
+
+# 나머지 스키마들은 기존과 동일... (생략)
 class InventoryImageBase(BaseModel):
     image_type: str = Field(default="general", description="이미지 유형")
     description: Optional[str] = Field(None, max_length=200, description="이미지 설명")
@@ -140,7 +142,6 @@ class InventoryImageInDB(InventoryImageBase):
 class InventoryImage(InventoryImageInDB):
     pass
 
-# 목록 응답
 class UnifiedInventoryList(BaseModel):
     items: List[UnifiedInventoryInDB]
     total: int
@@ -148,7 +149,6 @@ class UnifiedInventoryList(BaseModel):
     size: int
     pages: int
 
-# 통계 스키마 (단순화)
 class UnifiedInventoryStats(BaseModel):
     total_items: int
     total_categories: int
@@ -157,22 +157,15 @@ class UnifiedInventoryStats(BaseModel):
     overstocked_items: int
     total_value: float
     average_utilization: float
-    
-    # 상태별 통계
     status_distribution: Dict[str, int] = {
         "normal": 0,
         "low_stock": 0,
         "out_of_stock": 0,
         "overstocked": 0
     }
-    
-    # 카테고리별 통계
     category_distribution: List[Dict[str, Any]] = []
-    
-    # 최근 활동 (사용 로그 관련 제거)
     recent_receipts: int
 
-# 검색 필터
 class UnifiedInventoryFilter(BaseModel):
     search: Optional[str] = None
     category: Optional[str] = None
@@ -180,21 +173,17 @@ class UnifiedInventoryFilter(BaseModel):
     supplier_name: Optional[str] = None
     location: Optional[str] = None
     warehouse: Optional[str] = None
-    
     stock_status: Optional[str] = None
     is_consumable: Optional[bool] = None
     requires_approval: Optional[bool] = None
-    
     last_received_from: Optional[datetime] = None
     last_received_to: Optional[datetime] = None
-    
     min_quantity: Optional[int] = None
     max_quantity: Optional[int] = None
-    
     has_images: Optional[bool] = None
     tags: Optional[List[str]] = None
 
-# 구매 요청에서 품목 생성용 스키마
+# 나머지 스키마들... (기존과 동일)
 class CreateInventoryFromPurchase(BaseModel):
     purchase_request_id: int = Field(..., description="구매 요청 ID")
     received_quantity: int = Field(..., ge=1, description="수령 수량")
@@ -206,7 +195,6 @@ class CreateInventoryFromPurchase(BaseModel):
     condition: str = Field(default="good", description="품목 상태")
     notes: Optional[str] = Field(None, description="비고")
 
-# 파일 업로드 응답
 class ImageUploadResponse(BaseModel):
     success: bool
     image_id: int
@@ -215,7 +203,6 @@ class ImageUploadResponse(BaseModel):
     thumbnail_url: Optional[str] = None
     message: str
 
-# Excel 내보내기/가져오기
 class InventoryExportOptions(BaseModel):
     include_receipts: bool = Field(default=False, description="수령 이력 포함")
     include_images: bool = Field(default=False, description="이미지 정보 포함")
@@ -230,32 +217,24 @@ class InventoryImportResult(BaseModel):
     updated_count: int
     skipped_count: int
     error_count: int
-    
     created_items: List[str] = []
     updated_items: List[str] = []
     errors: List[Dict[str, Any]] = []
     warnings: List[Dict[str, Any]] = []
-    
     processing_time: float
     message: str
 
-# 대시보드용 요약 정보 (단순화)
 class InventoryDashboard(BaseModel):
     total_items: int
     total_value: float
     low_stock_alerts: int
     recent_receipts: int
-    
-    # 차트 데이터
     category_chart: List[Dict[str, Any]]
     stock_status_chart: List[Dict[str, Any]]
     monthly_receipts: List[Dict[str, Any]]
-    
-    # 알림 정보
     alerts: List[Dict[str, Any]]
     recommendations: List[str]
 
-# 재고 이동/전송 (단순화)
 class InventoryTransfer(BaseModel):
     quantity: int = Field(..., ge=1, description="이동 수량")
     to_location: str = Field(..., description="이동할 위치")
@@ -264,7 +243,6 @@ class InventoryTransfer(BaseModel):
     reason: str = Field(..., description="이동 사유")
     notes: Optional[str] = Field(None, description="비고")
 
-# QR 코드 생성
 class QRCodeGenerate(BaseModel):
     include_info: List[str] = Field(default=["name", "code", "location"], description="포함할 정보")
     size: str = Field(default="medium", description="QR 코드 크기")
@@ -273,18 +251,15 @@ class QRCodeResponse(BaseModel):
     qr_code_url: str
     qr_code_data: str
     expiry_date: Optional[datetime] = None
-    usage_type: str = Field(..., description="사용 유형")  # 'consumption', 'return', 'transfer', 'disposal'
+    usage_type: str = Field(..., description="사용 유형")
     quantity: int = Field(..., ge=1, description="수량")
     unit: str = Field(default="개", description="단위")
-    
     user_name: str = Field(..., max_length=100, description="사용자명")
     user_email: Optional[str] = Field(None, max_length=255, description="사용자 이메일")
     department: str = Field(..., max_length=100, description="부서")
-    
     purpose: Optional[str] = Field(None, max_length=200, description="사용 목적")
     project: Optional[str] = Field(None, max_length=100, description="프로젝트")
     from_location: Optional[str] = Field(None, max_length=200, description="출발 위치")
     to_location: Optional[str] = Field(None, max_length=200, description="도착 위치")
-    
     expected_return_date: Optional[datetime] = Field(None, description="예상 반납일")
     notes: Optional[str] = Field(None, description="비고")

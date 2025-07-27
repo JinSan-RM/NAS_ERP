@@ -7,7 +7,7 @@ import { ThemeProvider } from 'styled-components';
 import { GlobalStyles, theme } from './styles/theme';
 import queryClient from './hooks/queryClient';
 // Components - 실제 디렉토리 구조에 맞게 수정
-import Layout from './components/inventory/common/Layout';
+import Layout from './components/common/Layout';
 import DashboardPage from './components/dashboard/DashboardPage';  // pages가 아닌 components에 있음
 import InventoryPage from './components/inventory/InventoryPage';
 import ReceiptPage from './components/receipt/ReceiptPage';

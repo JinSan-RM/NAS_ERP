@@ -16,7 +16,12 @@ import {
   AlertCircle,
   FileText,
   Upload,
-  Filter
+  Filter,
+  Package2, 
+  CheckCircle2,
+  TrendingUp,
+  Users,
+  Calendar
 } from 'lucide-react';
 
 // Components
@@ -31,26 +36,43 @@ import ExcelBulkUpload from './ExcelBulkUpload';
 import PurchaseRequestFilters from './PurchaseRequestFilters';
 import RequestDetailModal from './RequestDetailModal';
 import { useNavigate } from 'react-router-dom';
-import { Package2, CheckCircle2 } from 'lucide-react';
 
 // Services
-import { purchaseApi, inventoryApi, SearchFilters } from '../../services/api';
+import api, { purchaseApi, inventoryApi } from '../../services/api';
 
-// Types
+// SearchFilters 타입 정의
+interface SearchFilters {
+  search?: string;
+  status?: string;
+  urgency?: string;
+  department?: string;
+  category?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
+// Types - API와 맞춤
 interface PurchaseRequest {
   id: number;
-  itemName: string;
+  item_name: string;
+  specifications?: string;
   quantity: number;
-  requestedBy: string;
-  department: string;
+  unit?: string;
+  estimated_unit_price?: number;
+  total_budget?: number;
+  currency?: string;
+  category?: string;
   urgency: string;
+  requester_name: string;
+  requester_email?: string;
+  department: string;
   status: string;
-  requestDate: string;
-  reason: string;
-  estimatedPrice?: number;
-  supplier?: string;
+  created_at: string;
+  justification: string;
   notes?: string;
   inventory_item_id?: number;
+  inventory_item_code?: string;
+  preferred_supplier?: string;
 }
 
 interface TableColumn<T> {
@@ -64,7 +86,7 @@ interface TableColumn<T> {
 type RequestStatus = 'all' | 'pending' | 'approved' | 'rejected' | 'in_review';
 type UrgencyLevel = 'all' | 'low' | 'normal' | 'high' | 'urgent';
 
-// Styled Components
+// 🎨 개선된 Styled Components (두 번째 코드에서 가져옴)
 const Container = styled.div`
   padding: 24px;
   max-width: 1400px;
@@ -221,29 +243,29 @@ const StatusBadge = styled.span<{ $status: string }>`
   
   ${props => {
     switch (props.$status) {
-      case 'pending':
+      case 'SUBMITTED':
         return `
-          background: #fef3c7;
-          color: #92400e;
+          background: #FEF3C7;
+          color: #92400E;
         `;
-      case 'approved':
+      case 'COMPLETED':
         return `
-          background: #d1fae5;
-          color: #065f46;
+          background: #D1FAE5;
+          color: #065F46;
         `;
-      case 'rejected':
+      case 'CANCELLED':
         return `
-          background: #fee2e2;
-          color: #991b1b;
+          background: #FEE2E2;
+          color: #991B1B;
         `;
-      case 'in_review':
+      case 'IN_REVIEW':
         return `
-          background: #dbeafe;
-          color: #1e40af;
+          background: #DBEAFE;
+          color: #1E40AF;
         `;
       default:
         return `
-          background: #f3f4f6;
+          background: #F3F4F6;
           color: #374151;
         `;
     }
@@ -291,70 +313,7 @@ const UrgencyBadge = styled.span<{ $urgency: string }>`
 
 const ActionButtonGroup = styled.div`
   display: flex;
-  gap: 2px;
-  align-items: center;
-  justify-content: center;
-`;
-
-const IconButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  border: none;
-  background: transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  color: #6b7280;
-  transition: all 0.2s ease;
-  min-width: 32px;
-  height: 32px;
-  
-  &:hover {
-    background: #f3f4f6;
-    color: #374151;
-  }
-  
-  &:focus {
-    outline: 2px solid #3b82f6;
-    outline-offset: -2px;
-  }
-  
-  &.edit:hover {
-    background: #dbeafe;
-    color: #1d4ed8;
-  }
-  
-  &.delete:hover {
-    background: #fee2e2;
-    color: #dc2626;
-  }
-  
-  &.view:hover {
-    background: #f0fdf4;
-    color: #16a34a;
-  }
-  &.receipt:hover {
-    background: #059669 !important;
-    transform: scale(1.05);
-  }
-  
-  &.receipt {
-    animation: pulse-green 2s infinite;
-  }
-  
-  @keyframes pulse-green {
-    0%, 100% { 
-      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); 
-    }
-    50% { 
-      box-shadow: 0 0 0 4px rgba(16, 185, 129, 0.3); 
-    }
-  }
-  
-  svg {
-    flex-shrink: 0;
-  }
+  gap: 5px;
 `;
 
 const ErrorContainer = styled.div`
@@ -402,6 +361,7 @@ const EmptyState = styled.div`
     line-height: 1.6;
   }
 `;
+
 const ConfirmDialog = styled.div`
   position: fixed;
   top: 0;
@@ -458,7 +418,7 @@ const ConfirmContent = styled.div`
     
     .info-row {
       display: flex;
-      justify-content: between;
+      justify-content: space-between;
       margin-bottom: 8px;
       
       &:last-child {
@@ -486,41 +446,6 @@ const ConfirmContent = styled.div`
     margin-top: 24px;
   }
 `;
-const shimmerAnimation = `
-  @keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-  }
-  
-  .receipt {
-    position: relative;
-    overflow: hidden;
-  }
-  
-  .receipt::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -100%;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.4), transparent);
-    animation: shimmer 2s infinite;
-  }
-`;
-
-const pulseAnimation = `
-  @keyframes pulse {
-    0%, 100% { 
-      transform: scale(1);
-      opacity: 1;
-    }
-    50% { 
-      transform: scale(1.05);
-      opacity: 0.8;
-    }
-  }
-`;
 
 // 메인 컴포넌트
 const PurchaseRequestPage: React.FC = () => {
@@ -536,7 +461,6 @@ const PurchaseRequestPage: React.FC = () => {
   const [viewingRequest, setViewingRequest] = useState<PurchaseRequest | null>(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [confirmingItem, setConfirmingItem] = useState<PurchaseRequest | null>(null);
-
 
   // 구매 요청 목록 조회
   const { 
@@ -559,31 +483,7 @@ const PurchaseRequestPage: React.FC = () => {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Export Mutation
-  const exportMutation = useMutation({
-    mutationFn: () => purchaseApi.exportRequests(filters),
-    onSuccess: () => {
-      toast.success('Excel 파일이 다운로드되었습니다.');
-    },
-    onError: (error) => {
-      console.error('Export error:', error);
-      toast.error('Excel 다운로드에 실패했습니다.');
-    },
-  });
-
-  // 삭제 Mutation
-  const deleteMutation = useMutation({
-    mutationFn: purchaseApi.deleteRequest,
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      toast.success('구매 요청이 삭제되었습니다.');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
-    },
-  });
-
+  // 🔥 안정적인 구매완료 처리 (첫 번째 코드의 로직 사용)
   const completePurchaseMutation = useMutation({
     mutationFn: async ({ requestId, requestData }: { 
       requestId: number; 
@@ -660,90 +560,172 @@ const PurchaseRequestPage: React.FC = () => {
         throw error;
       }
     },
+    
+    // 🔥 재시도 설정 추가
+    retry: (failureCount, error: any) => {
+      // 최대 2번까지만 재시도
+      if (failureCount >= 2) return false;
+      
+      // 트랜잭션 오류나 500 에러인 경우에만 재시도
+      const shouldRetry = error.response?.status === 500 || 
+                         error.response?.data?.detail?.includes('transaction is aborted');
+      
+      if (shouldRetry) {
+        console.log(`🔄 재시도 ${failureCount + 1}/2`);
+        return true;
+      }
+      
+      return false;
+    },
+    
+    // 재시도 간격 (점진적 증가)
+    retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 5000),
+
     onSuccess: async (result, variables) => {
       console.log('🎉 구매완료 처리 결과:', result);
       
-      // 캐시 업데이트
-      queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
-        if (!oldData?.data?.items) return oldData;
+      try {
+        // 캐시 업데이트
+        queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
+          if (!oldData?.data?.items) return oldData;
+          
+          return {
+            ...oldData,
+            data: {
+              ...oldData.data,
+              items: oldData.data.items.map((item: any) => {
+                if (item.id === variables.requestId) {
+                  return {
+                    ...item,
+                    status: 'COMPLETED',
+                    completed_date: new Date().toISOString(),
+                    completed_by: '현재사용자',
+                    inventory_item_id: result.inventory_item_id,
+                    inventory_item_code: result.inventory_item_code
+                  };
+                }
+                return item;
+              })
+            }
+          };
+        });
         
-        return {
-          ...oldData,
-          data: {
-            ...oldData.data,
-            items: oldData.data.items.map((item: any) => {
-              if (item.id === variables.requestId) {
-                return {
-                  ...item,
-                  status: 'COMPLETED',
-                  completed_date: new Date().toISOString(),
-                  completed_by: '현재사용자',
-                  inventory_item_id: result.inventory_item_id,
-                  inventory_item_code: result.inventory_item_code
-                };
-              }
-              return item;
-            })
-          }
-        };
-      });
+        // 성공 메시지 표시
+        if (result.inventory_created !== false) {
+          // 완전 성공
+          toast.success(
+            `🎉 구매완료! 품목코드: ${result.inventory_item_code}로 등록되었습니다!`,
+            { autoClose: 5000, position: 'top-center' }
+          );
+          
+          // 품목관리 페이지로 이동
+          setTimeout(() => {
+            navigate(`/inventory?highlight=${result.inventory_item_id}`);
+          }, 2000);
+          
+        } else {
+          // 부분 성공
+          toast.warning(
+            '구매 요청은 완료되었지만 품목 등록에 실패했습니다. 수동으로 등록해주세요.',
+            { autoClose: 7000 }
+          );
+        }
+        
+        // 🔥 쿼리 새로고침을 순차적으로 실행 (동시성 문제 방지)
+        await queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        await queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        await queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        await new Promise(resolve => setTimeout(resolve, 200));
+        
+        await queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
+        
+        setConfirmingItem(null);
+        
+      } catch (error) {
+        console.error('성공 후 처리 중 오류:', error);
+        toast.warning('구매는 완료되었으나 화면 새로고침 중 오류가 발생했습니다. 페이지를 새로고침해주세요.');
+        setConfirmingItem(null);
+      }
+    },
+    
+    onError: (error: any) => {
+      console.error('❌ 구매완료 처리 실패:', error);
       
-      // 성공 메시지 표시
-      if (result.inventory_created !== false) {
-        // 완전 성공
-        toast.success(
-          `🎉 구매완료! 품목코드: ${result.inventory_item_code}로 등록되었습니다!`,
-          { autoClose: 5000, position: 'top-center' }
-        );
-        
-        // 품목관리 페이지로 이동
-        setTimeout(() => {
-          navigate(`/inventory?highlight=${result.inventory_item_id}`);
-        }, 2000);
-        
-      } else {
-        // 부분 성공
-        toast.warning(
-          '구매 요청은 완료되었지만 품목 등록에 실패했습니다. 수동으로 등록해주세요.',
-          { autoClose: 7000 }
-        );
+      // 에러 메시지 추출 및 개선
+      let errorMessage = '구매완료 처리 중 오류가 발생했습니다.';
+      
+      if (error.message) {
+        errorMessage = error.message;
+      } else if (error.response?.data?.detail) {
+        // 트랜잭션 오류 메시지 개선
+        if (error.response.data.detail.includes('transaction is aborted')) {
+          errorMessage = '⚠️ 데이터베이스 처리 중 문제가 발생했습니다.\n\n잠시 후 다시 시도하거나, 지속적으로 문제가 발생하면 관리자에게 문의해주세요.';
+        } else {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error.response?.data?.message) {
+        errorMessage = error.response.data.message;
       }
       
-      // 쿼리 새로고침
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['purchase-requests'] }),
-        queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] }),
-        queryClient.invalidateQueries({ queryKey: ['inventory'] }),
-        queryClient.invalidateQueries({ queryKey: ['inventory-stats'] })
-      ]);
+      toast.error(errorMessage, {
+        autoClose: 7000,
+        position: 'top-center'
+      });
       
-      setConfirmingItem(null);
-    },
-    onError: (error: any) => {
-      console.error('❌ 구매완료 처리 완전 실패:', error);
-      toast.error('구매완료 처리 중 오류가 발생했습니다.');
       setConfirmingItem(null);
     },
   });
 
+  // 삭제 Mutation
+  const deleteMutation = useMutation({
+    mutationFn: purchaseApi.deleteRequest,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      toast.success('구매 요청이 삭제되었습니다.');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
+    },
+  });
+
+  // Export Mutation
+  const exportMutation = useMutation({
+    mutationFn: () => purchaseApi.exportRequests(filters),
+    onSuccess: () => {
+      toast.success('Excel 파일이 다운로드되었습니다.');
+    },
+    onError: (error) => {
+      console.error('Export error:', error);
+      toast.error('Excel 다운로드에 실패했습니다.');
+    },
+  });
+
   // 테이블 컬럼 정의
-  // 테이블 컬럼 정의 수정
-const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
+  const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     {
       key: 'id',
       label: '번호',
       sortable: true,
       width: '80px',
-      render: (value) => `#${value}`,
+      render: (value) => (
+        <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: '500' }}>
+          #{value}
+        </span>
+      ),
     },
     {
-      key: 'item_name', // 백엔드 필드명과 일치
+      key: 'item_name',
       label: '품목명',
       sortable: true,
       width: '200px',
-      render: (value) => (
-        <div style={{ fontWeight: '500', color: '#1f2937' }}>
-          {value || '품목명 없음'}
+      render: (value, item) => (
+        <div>
+          <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>{value || '품목명 없음'}</div>
         </div>
       ),
     },
@@ -751,14 +733,18 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
       key: 'quantity',
       label: '수량',
       width: '80px',
-      render: (value) => (
-        <div style={{ textAlign: 'center', fontWeight: '500' }}>
-          {value?.toLocaleString() || '0'}
+      render: (value, item) => (
+        <div style={{ 
+          textAlign: 'center', 
+          fontWeight: '500',
+          whiteSpace: 'nowrap'  // 줄바꿈 방지
+        }}>
+          {value?.toLocaleString() || '0'} {item.unit || '개'}
         </div>
       ),
     },
     {
-      key: 'requester_name', // 백엔드 필드명과 일치
+      key: 'requester_name',
       label: '요청자',
       width: '120px',
       render: (value, item) => (
@@ -791,27 +777,31 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         const statusMap: Record<string, string> = {
           'SUBMITTED': '요청됨',
           'COMPLETED': '구매완료', 
-          'cancCANCELLEDelled': '취소됨'
+          'CANCELLED': '취소됨'
         };
         return <StatusBadge $status={value}>{statusMap[value] || value}</StatusBadge>;
       },
     },
     {
-      key: 'created_at', // 백엔드 필드명과 일치
+      key: 'created_at',
       label: '요청일',
       sortable: true,
       width: '120px',
       render: (value) => value ? new Date(value).toLocaleDateString('ko-KR') : '-',
     },
     {
-      key: 'total_budget', // 백엔드 필드명과 일치
+      key: 'total_budget',
       label: '예상금액',
-      width: '120px',
-      render: (value) => value ? `${value.toLocaleString()}원` : '-',
+      width: '160px',
+      render: (value, item) => {
+        if (!value || value === 0) return '-';
+        const currency = item.currency || '원';
+        return `${currency} ${value.toLocaleString()}`;
+      },
     },
     {
       key: 'actions',
-      label: '작업',
+      label: '관리',
       width: '160px',
       render: (_, item) => {
         const isCompleted = item.status === 'COMPLETED';
@@ -819,28 +809,13 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         
         return (
           <ActionButtonGroup>
-            <IconButton 
-              className="view"
-              onClick={() => handleView(item)}
-              title="상세보기"
-            >
-              <Eye size={14} />
-            </IconButton>
-            
-            <IconButton 
-              className="delete"
-              onClick={() => handleDelete(item.id)}
-              title="삭제"
-            >
-              <Trash2 size={14} />
-            </IconButton>
-            
             {/* 🔥 완료 상태와 품목 등록 여부에 따른 버튼 표시 */}
             {isCompleted ? (
               hasInventoryItem ? (
                 // ✅ 완전 완료 (품목까지 등록됨)
-                <IconButton 
-                  className="completed"
+                <Button
+                  size="sm"
+                  variant="outline"
                   title={`구매완료 & 품목등록 완료 ${item.inventory_item_code ? `(${item.inventory_item_code})` : ''}`}
                   onClick={() => {
                     if (item.inventory_item_id) {
@@ -848,52 +823,74 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
                     }
                   }}
                   style={{
-                    backgroundColor: '#10b981',
-                    color: 'white',
-                    borderRadius: '6px',
-                    cursor: item.inventory_item_id ? 'pointer' : 'default'
+                    background: '#f0fdf4',
+                    color: '#16a34a',
+                    border: '1px solid #16a34a'
                   }}
+                  disabled={!item.inventory_item_id}
                 >
                   <Package2 size={14} />
-                </IconButton>
+                  완료됨
+                </Button>
               ) : (
                 // ⚠️ 부분 완료 (구매만 완료, 품목 등록 안됨)
-                <IconButton 
-                  className="partial"
+                <Button
+                  size="sm"
+                  variant="outline"
                   title="구매완료됨 (품목 등록 실패)"
+                  disabled
                   style={{
-                    backgroundColor: '#6b7280',
-                    color: 'white',
-                    borderRadius: '6px',
-                    cursor: 'default'
+                    background: '#f3f4f6',
+                    color: '#6b7280',
+                    border: '1px solid #6b7280'
                   }}
                 >
                   <Check size={14} />
-                </IconButton>
+                  구매완료
+                </Button>
               )
             ) : (
               // 🟢 미완료 - 구매완료 버튼
-              <IconButton 
-                className="complete"
+              <Button
+                size="sm"
+                variant="success"
                 onClick={() => handlePurchaseComplete(item)}
                 title="구매완료 + 품목등록"
                 style={{
-                  backgroundColor: '#3b82f6',
+                  background: 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
                   color: 'white',
-                  borderRadius: '6px'
+                  fontWeight: '600'
                 }}
               >
                 <CheckCircle2 size={14} />
-              </IconButton>
+                구매완료
+              </Button>
             )}
-            
-            <IconButton 
-              className="edit"
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleView(item)}
+              title="상세보기"
+            >
+              <Eye size={14} />
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
               onClick={() => handleEdit(item)}
               title="수정"
             >
               <Edit size={14} />
-            </IconButton>
+            </Button>
+            
+            <Button
+              size="sm"
+              variant="danger"
+              onClick={() => handleDelete(item.id)}
+              title="삭제"
+            >
+              <Trash2 size={14} />
+            </Button>
           </ActionButtonGroup>
         );
       },
@@ -902,7 +899,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
 
   // 이벤트 핸들러
   const handleView = (request: PurchaseRequest) => {
-    console.log('상세보기 데이터:', request); // 디버깅용
+    console.log('상세보기 데이터:', request);
     setViewingRequest(request);
     setIsDetailModalOpen(true);
   };
@@ -922,15 +919,26 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     exportMutation.mutate();
   };
 
-  const handleRefresh = () => {
-    queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-    queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-    refetch();
+  // 🔥 개선된 새로고침 함수
+  const handleRefresh = async () => {
+    try {
+      // 순차적으로 새로고침 (동시성 문제 방지)
+      await queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      await queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
+      await new Promise(resolve => setTimeout(resolve, 100));
+      
+      await refetch();
+    } catch (error) {
+      console.error('새로고침 중 오류:', error);
+      toast.error('새로고침 중 오류가 발생했습니다.');
+    }
   };
 
-  const handleFilterChange = (newFilters: SearchFilters) => {
-    setFilters(newFilters);
-    setCurrentPage(1); // 필터 변경시 첫 페이지로 이동
+  const handleFilterChange = (newFilters: Partial<SearchFilters>) => {
+    setFilters(prev => ({ ...prev, ...newFilters }));
+    setCurrentPage(1);
   };
 
   const handleFormSuccess = () => {
@@ -949,246 +957,37 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     handleRefresh();
   };
 
-  // 3. 🔥 수령완료 처리 함수 추가
-  const handleReceiptComplete = (request: PurchaseRequest) => {
-    setConfirmingItem(request);
-  };
-
-  // 4. 실제 수령완료 처리 함수
-  // 🔥 개선된 구매완료 처리 함수
-  const confirmReceiptComplete = async () => {
-    if (!confirmingItem) return;
-    
-    try {
-      console.log('🚀 구매 완료 처리 시작:', confirmingItem);
-      
-      // 완료 데이터 준비
-      const completionData = {
-        received_quantity: Number(confirmingItem.quantity) || 1,
-        receiver_name: confirmingItem.requester_name || '시스템',
-        receiver_email: confirmingItem.requester_email || '',
-        location: '창고',
-        warehouse: '메인창고',
-        condition: 'good',
-        notes: `구매요청 #${confirmingItem.id}에서 자동 완료 처리`,
-        completed_by: '현재사용자',
-        received_date: new Date().toISOString(),
-        unit_price: Number(confirmingItem.estimated_unit_price) || 0,
-        specifications: confirmingItem.specifications || '',
-        supplier_name: confirmingItem.preferred_supplier || ''
-      };
-
-      console.log('📤 전송 데이터:', completionData);
-      
-      // API 호출
-      const completionResult = await purchaseApi.completePurchase(confirmingItem.id, completionData);
-      console.log('✅ API 응답:', completionResult);
-      
-      // 성공 처리
-      if (completionResult?.success) {
-        const successMessage = completionResult.inventory_item_code 
-          ? `🎉 구매가 완료되어 품목관리에 등록되었습니다!\n품목코드: ${completionResult.inventory_item_code}`
-          : '🎉 구매가 완료되어 품목관리에 등록되었습니다!';
-        
-        toast.success(successMessage, { 
-          autoClose: 5000,
-          position: 'top-center'
-        });
-        
-        // 쿼리 새로고침
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['purchase-requests'] }),
-          queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] }),
-          queryClient.invalidateQueries({ queryKey: ['inventory'] }),
-          queryClient.invalidateQueries({ queryKey: ['inventory-stats'] })
-        ]);
-        
-        setConfirmingItem(null);
-        
-        // 페이지 이동
-        if (completionResult.inventory_item_id) {
-          setTimeout(() => {
-            navigate(`/inventory?highlight=${completionResult.inventory_item_id}`);
-          }, 1500);
-        }
-        
-      } else {
-        throw new Error(completionResult?.message || '구매완료 처리에 실패했습니다.');
-      }
-      
-    } catch (error) {
-      console.error('❌ 구매완료 처리 실패:', error);
-      
-      // 에러 메시지 추출
-      let errorMessage = '구매완료 처리 중 오류가 발생했습니다.';
-      
-      if (error.response?.data?.detail) {
-        errorMessage = error.response.data.detail;
-      } else if (error.response?.data?.message) {
-        errorMessage = error.response.data.message;
-      } else if (error.message) {
-        errorMessage = error.message;
-      }
-      
-      toast.error(errorMessage, {
-        autoClose: 7000,
-        position: 'top-center'
-      });
-    }
-  };
-  // API 호출 함수도 개선 (api.ts에 추가)
-  completePurchase: async (requestId: number, completionData: any) => {
-    console.log(`📡 구매완료 API 호출: /purchase-requests/${requestId}/complete`);
-    console.log('📤 요청 데이터:', completionData);
-    
-    try {
-      const response = await api.post(`/purchase-requests/${requestId}/complete`, completionData);
-      console.log('📥 응답 데이터:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('❌ API 호출 실패:', error);
-      
-      // 상세 에러 로깅
-      if (error.response) {
-        console.error('응답 상태:', error.response.status);
-        console.error('응답 데이터:', error.response.data);
-      }
-      
-      throw error;
-    }
-  }
   const handlePurchaseComplete = (request: PurchaseRequest) => {
     console.log('🔄 구매완료 처리 요청:', request);
     setConfirmingItem(request);
   };
 
-
-  const confirmPurchaseComplete = () => {
+  // 🔥 개선된 구매완료 확인 함수
+  const confirmPurchaseComplete = async () => {
     if (!confirmingItem) return;
     
     console.log('🆕 구매완료 + 품목등록 처리 시작');
     
-    // 구매 요청 데이터와 함께 전달
-    completePurchaseMutation.mutate({
-      requestId: confirmingItem.id,
-      requestData: confirmingItem
-    });
+    try {
+      // 중복 클릭 방지
+      if (completePurchaseMutation.isPending) {
+        console.log('⚠️ 이미 처리 중입니다.');
+        return;
+      }
+      
+      // 구매 요청 데이터와 함께 전달
+      await completePurchaseMutation.mutateAsync({
+        requestId: confirmingItem.id,
+        requestData: confirmingItem
+      });
+      
+    } catch (error) {
+      // 이미 onError에서 처리됨
+      console.log('구매완료 처리가 실패했습니다.');
+    }
   };
 
   const cancelPurchaseComplete = () => {
-    setConfirmingItem(null);
-  };
-
-  // 추가: 백업 구매완료 처리 함수 (API 실패 시 대안)
-  const fallbackReceiptComplete = async (item: PurchaseRequest) => {
-    try {
-      console.log('🔄 백업 구매완료 처리 시작');
-      
-      // 1. 구매 요청 상태만 업데이트
-      await purchaseApi.updateRequest(item.id, { 
-        status: 'COMPLETED',
-        completed_date: new Date().toISOString(),
-        completed_by: '현재사용자'
-      });
-      
-      toast.success('구매 요청이 완료 처리되었습니다. (품목 등록은 수동으로 진행해주세요)');
-      
-      // 쿼리 새로고침
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-      queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      
-      setConfirmingItem(null);
-      
-    } catch (error) {
-      console.error('백업 처리도 실패:', error);
-      toast.error('구매완료 처리에 실패했습니다. 관리자에게 문의하세요.');
-    }
-  };
-//   const confirmReceiptComplete = async () => {
-//   if (!confirmingItem) return;
-  
-//   try {
-//     // 1. 🔥 구매 요청 데이터를 품목관리용 데이터로 변환
-//     const inventoryData = {
-//       item_code: `ITM-${Date.now()}`,
-//       item_name: confirmingItem.item_name || '품목명 없음',
-//       category: confirmingItem.category || 'OTHER',
-//       description: confirmingItem.specifications || '',
-//       current_stock: Number(confirmingItem.quantity) || 0,
-//       minimum_stock: Math.max(1, Math.ceil((Number(confirmingItem.quantity) || 0) * 0.2)),
-//       maximum_stock: (Number(confirmingItem.quantity) || 0) * 2,
-//       unit: confirmingItem.unit || '개',
-//       unit_price: Number(confirmingItem.estimated_unit_price) || 0,
-//       currency: confirmingItem.currency || 'KRW',
-//       supplier_name: confirmingItem.preferred_supplier || '',
-//       location: '창고',
-//       warehouse: '메인창고',
-//       purchase_request_id: confirmingItem.id,
-//       notes: `구매요청 #${confirmingItem.id}에서 자동 생성됨`,
-//       is_active: true
-//     };
-
-//     // 2. 품목 추가 (에러가 나도 계속 진행)
-//     try {
-//       const inventoryResponse = await fetch('http://localhost:8000/api/v1/inventory/', {
-//         method: 'POST',
-//         headers: {
-//           'Content-Type': 'application/json',
-//         },
-//         body: JSON.stringify(inventoryData)
-//       });
-
-//       if (inventoryResponse.ok) {
-//         const inventoryResult = await inventoryResponse.json();
-//         console.log('품목 추가 성공:', inventoryResult);
-//         toast.success('품목이 재고관리에 추가되었습니다!');
-//       } else {
-//         console.warn('품목 추가 실패, 상태 업데이트는 계속 진행');
-//       }
-//     } catch (inventoryError) {
-//       console.warn('품목 추가 실패:', inventoryError);
-//       toast.warning('품목 추가 중 문제가 있었지만 구매는 완료됩니다.');
-//     }
-
-//     // 3. 구매 요청 상태를 'COMPLETED'로 업데이트
-//     await purchaseApi.updateRequest(confirmingItem.id, { 
-//       status: 'COMPLETED',
-//       completed_date: new Date().toISOString(),
-//       completed_by: '현재사용자' // 실제로는 로그인한 사용자 정보
-//     });
-
-//     toast.success('🎉 구매가 완료되어 품목관리에 등록되었습니다!');
-    
-//     // 4. 쿼리 새로고침 (에러 방지)
-//     try {
-//       queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
-//       queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-//       queryClient.invalidateQueries({ queryKey: ['inventory'] });
-//       queryClient.invalidateQueries({ queryKey: ['inventory-stats'] });
-//     } catch (queryError) {
-//       console.warn('쿼리 새로고침 실패:', queryError);
-//     }
-//     setConfirmingItem(null);
-    
-//     // 5. 1.5초 후 품목관리 페이지로 이동
-//     // 5. 안전한 페이지 이동
-//     try {
-//       setTimeout(() => {
-//         navigate('/inventory');
-//       }, 1000); // 시간을 줄여서 더 빠르게
-//     } catch (navigationError) {
-//       console.error('페이지 이동 실패:', navigationError);
-//       // 수동으로 이동
-//       window.location.href = '/inventory';
-//     }
-    
-//   } catch (error: any) {
-//     console.error('구매완료 처리 실패:', error);
-//     toast.error(error.response?.data?.message || '구매완료 처리 중 오류가 발생했습니다.');
-//   }
-// };
-  // 5. 확인 다이얼로그 닫기
-  const cancelReceiptComplete = () => {
     setConfirmingItem(null);
   };
 
@@ -1203,6 +1002,12 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
     rejected: 0,
     this_month: 0,
   };
+
+  // 🔥 통계 계산 (실제 API 데이터와 현재 데이터 모두 사용)
+  const totalRequests = stats?.total || requests.length || 0;
+  const completedRequests = stats?.approved || requests.filter(req => req.status === 'COMPLETED').length || 0;
+  const pendingRequests = stats?.pending || requests.filter(req => req.status === 'SUBMITTED' || req.status === 'PENDING').length || 0;
+  const rejectedRequests = stats?.rejected || requests.filter(req => req.status === 'CANCELLED' || req.status === 'REJECTED').length || 0;
 
   if (isLoading && !requestsData) {
     return <LoadingSpinner text="구매 요청 데이터를 불러오는 중..." />;
@@ -1244,18 +1049,18 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         </PageSubtitle>
       </PageHeader>
 
-      {/* 통계 카드 */}
+      {/* 🎨 개선된 통계 카드 (두 번째 코드 스타일) */}
       <StatsContainer>
         <StatCard $color="#3b82f6">
           <div className="stat-header">
             <FileText size={24} />
             <span>전체 요청</span>
           </div>
-          <div className="stat-value">{stats.total.toLocaleString()}</div>
+          <div className="stat-value">{totalRequests.toLocaleString()}</div>
           <div className="stat-label">총 구매 요청</div>
-          {stats.thisMonth > 0 && (
+          {stats.this_month > 0 && (
             <div className="stat-change positive">
-              이번 달 +{stats.thisMonth}
+              이번 달 +{stats.this_month}
             </div>
           )}
         </StatCard>
@@ -1265,7 +1070,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             <Clock size={24} />
             <span>승인 대기</span>
           </div>
-          <div className="stat-value">{stats.pending?.toLocaleString() || '0'}</div>
+          <div className="stat-value">{pendingRequests.toLocaleString()}</div>
           <div className="stat-label">처리 대기중</div>
         </StatCard>
 
@@ -1274,7 +1079,7 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             <Check size={24} />
             <span>승인 완료</span>
           </div>
-          <div className="stat-value">{stats.approved.toLocaleString()}</div>
+          <div className="stat-value">{completedRequests.toLocaleString()}</div>
           <div className="stat-label">승인된 요청</div>
         </StatCard>
 
@@ -1283,13 +1088,12 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
             <X size={24} />
             <span>거절됨</span>
           </div>
-          <div className="stat-value">{stats.rejected.toLocaleString()}</div>
+          <div className="stat-value">{rejectedRequests.toLocaleString()}</div>
           <div className="stat-label">거절된 요청</div>
         </StatCard>
       </StatsContainer>
 
       <ContentCard>
-        {/* 필터 섹션 */}
         <FilterSection>
           <FilterContainer>
             <PurchaseRequestFilters onFilter={handleFilterChange} />
@@ -1418,71 +1222,8 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
           }}
         />
       )}
-      {/* 구매완료 확인 다이얼로그 */}
-      {/* {confirmingItem && (
-        <ConfirmDialog onClick={cancelReceiptComplete}>
-          <ConfirmContent onClick={(e) => e.stopPropagation()}>
-            <div className="confirm-icon">
-              <CheckCircle2 size={32} />
-            </div>
-            
-            <div className="confirm-title">구매완료 처리</div>
-            
-            <div className="confirm-message">
-              아래 구매 요청을 완료 처리하시겠습니까?
-            </div>
-            <div className="confirm-message">
-              완료 후 품목관리 페이지로 이동합니다.
-            </div>
-            
-            <div className="item-info">
-              <div className="info-row">
-                <span className="label">품목명:</span>
-                <span className="value">{confirmingItem.item_name}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">수량:</span>
-                <span className="value">{confirmingItem.quantity} {confirmingItem.unit || '개'}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">요청자:</span>
-                <span className="value">{confirmingItem.requester_name}</span>
-              </div>
-              <div className="info-row">
-                <span className="label">부서:</span>
-                <span className="value">{confirmingItem.department}</span>
-              </div>
-              {confirmingItem.total_budget && (
-                <div className="info-row">
-                  <span className="label">예산:</span>
-                  <span className="value">{confirmingItem.total_budget.toLocaleString()}원</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="button-group">
-              <Button 
-                variant="outline" 
-                onClick={cancelReceiptComplete}
-                size="lg"
-              >
-                취소
-              </Button>
-              <Button 
-                onClick={confirmReceiptComplete}
-                size="lg"
-                style={{
-                  background: 'linear-gradient(135deg, #10b981, #059669)',
-                  border: 'none'
-                }}
-              >
-                <CheckCircle2 size={18} />
-                구매완료
-              </Button>
-            </div>
-          </ConfirmContent>
-        </ConfirmDialog>
-      )} */}
+
+      {/* 🔥 구매완료 확인 다이얼로그 (첫 번째 코드 스타일) */}
       {confirmingItem && (
         <ConfirmDialog onClick={cancelPurchaseComplete}>
           <ConfirmContent onClick={(e) => e.stopPropagation()}>
@@ -1508,7 +1249,9 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
               </div>
               <div className="info-row">
                 <span className="label">수량:</span>
-                <span className="value">{confirmingItem.quantity} {confirmingItem.unit || '개'}</span>
+                <span className="value" style={{ display: 'inline', whiteSpace: 'nowrap' }}>
+                  {confirmingItem.quantity}&nbsp;{confirmingItem.unit || '개'}
+                </span>
               </div>
               <div className="info-row">
                 <span className="label">요청자:</span>
@@ -1558,7 +1301,6 @@ const columns: TableColumn<PurchaseRequest>[] = useMemo(() => [
         </ConfirmDialog>
       )}
     </Container>
-    
   );
 };
 
