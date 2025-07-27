@@ -17,6 +17,7 @@ import InventoryForm from './InventoryForm';
 import ReceiptModal from './ReceiptModal';
 
 import { inventoryApi } from '../../services/api';
+import InventoryExcelUpload from './InventoryExcelUpload';
 
 // Services
 import api from '../../services/api';
@@ -399,6 +400,7 @@ const InventoryPage: React.FC = () => {
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [selectedImageName, setSelectedImageName] = useState<string>('');
   const [imageZoom, setImageZoom] = useState(1);
+  const [isExcelUploadModalOpen, setIsExcelUploadModalOpen] = useState(false);
 
   // 재고 목록 조회
   const { 
@@ -1031,6 +1033,22 @@ const InventoryPage: React.FC = () => {
               <Plus size={16} />
               품목 추가
             </Button>
+            {/* 🔥 새로 추가: Excel 업로드 버튼 */}
+            <Button
+              variant="outline"
+              onClick={() => setIsExcelUploadModalOpen(true)}
+              style={{
+                background: 'linear-gradient(135deg, #10b981, #059669)',
+                color: 'white',
+                borderColor: '#10b981'
+              }}
+            >
+              <span>Excel 업로드</span>
+            </Button>
+            <Button onClick={() => setIsFormModalOpen(true)}>
+              <Plus size={16} />
+              품목 추가
+            </Button>
           </ActionButtons>
         </FilterContainer>
 
@@ -1167,6 +1185,14 @@ const InventoryPage: React.FC = () => {
           </ImageViewerContainer>
         </ImageViewerModal>
       )}
+      <InventoryExcelUpload
+        isOpen={isExcelUploadModalOpen}
+        onClose={() => setIsExcelUploadModalOpen(false)}
+        onSuccess={() => {
+          setIsExcelUploadModalOpen(false);
+          refetch();
+        }}
+      />
     </Container>
   );
 };

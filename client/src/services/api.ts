@@ -6,7 +6,7 @@ const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
-  timeout: 30000,
+  timeout: 120000,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -171,6 +171,21 @@ export interface PurchaseRequestStats {
   average_approval_time?: number;
 }
 
+export interface PurchaseSearchFilters {
+  search?: string;
+  status?: string;
+  urgency?: string;
+  department?: string;
+  category?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  requester_name?: string;
+  project?: string;
+  budget_code?: string;
+  is_active?: boolean;
+  min_budget?: number;
+  max_budget?: number;
+}
 export interface UploadResult {
   success: boolean;
   created_count: number;
@@ -373,9 +388,25 @@ export const purchaseApi = {
     }
   },
 
-  // Excel 일괄 업로드
+  // Excel 업로드 개선
   uploadExcel: async (file: File): Promise<UploadResult> => {
     try {
+      console.log('📤 구매요청 Excel 업로드 시작:', file.name);
+      
+      // 파일 유효성 검사
+      if (!file) {
+        throw new Error('파일이 선택되지 않았습니다.');
+      }
+      
+      if (!file.name.match(/\.(xlsx|xls)$/i)) {
+        throw new Error('Excel 파일만 업로드 가능합니다.');
+      }
+      
+      const maxSize = 10 * 1024 * 1024;
+      if (file.size > maxSize) {
+        throw new Error('파일 크기는 10MB를 초과할 수 없습니다.');
+      }
+      
       const formData = new FormData();
       formData.append('file', file);
       
@@ -383,39 +414,70 @@ export const purchaseApi = {
         headers: {
           'Content-Type': 'multipart/form-data',
         },
-        timeout: 120000, // 2분 타임아웃
+        timeout: 300000, // 5분 타임아웃
       });
       
-      return response.data;
-    } catch (error) {
-      console.error('Excel 업로드 실패:', error);
-      throw error;
+      console.log('✅ 구매요청 업로드 성공:', response.data);
+      
+      // 응답 구조화
+      const result: UploadResult = {
+        success: response.data.success || true,
+        created_count: response.data.created_count || 0,
+        created_items: response.data.request_numbers || [],
+        total_processed: response.data.total_processed || 0,
+        errors: response.data.errors || [],
+        message: response.data.message || '업로드가 완료되었습니다.'
+      };
+      
+      return result;
+    } catch (error: any) {
+      console.error('구매요청 Excel 업로드 실패:', error);
+      
+      if (error.response?.data) {
+        throw new Error(error.response.data.detail || '업로드 중 오류가 발생했습니다.');
+      }
+      throw new Error(error.message || '업로드 중 알 수 없는 오류가 발생했습니다.');
     }
   },
 
   // 템플릿 다운로드
   downloadTemplate: async (): Promise<void> => {
     try {
-      const blob = await apiRequest.download('/purchase-requests/template/download');
+      console.log('📋 구매요청 템플릿 다운로드 시작...');
       
+      const response = await api.get('/purchase-requests/template/download', {
+        responseType: 'blob',
+        timeout: 60000,
+      });
+      
+      if (!response.data || response.data.size === 0) {
+        throw new Error('빈 템플릿 파일이 반환되었습니다.');
+      }
+      
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'purchase_request_template.xlsx';
+      
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      link.download = `구매요청_템플릿_${today}.xlsx`;
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('템플릿 다운로드 실패:', error);
-      throw error;
+      
+      console.log('✅ 구매요청 템플릿 다운로드 완료');
+    } catch (error: any) {
+      console.error('❌ 구매요청 템플릿 다운로드 실패:', error);
+      throw new Error('템플릿 다운로드 중 오류가 발생했습니다.');
     }
   },
-
-  // Excel 내보내기
+  // 🔥 Excel 내보내기 함수 추가
   exportRequests: async (filters?: SearchFilters): Promise<void> => {
     try {
+      console.log('📊 구매요청 Excel 내보내기 시작...');
+      
       const params = filters ? {
         search: filters.search,
         status: filters.status,
@@ -426,25 +488,56 @@ export const purchaseApi = {
         date_to: filters.dateTo
       } : {};
 
-      const blob = await apiRequest.download('/purchase-requests/export/excel', params);
-      
+      // undefined 값 제거
+      const filteredParams = Object.fromEntries(
+        Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
+      );
+
+      console.log('📋 내보내기 파라미터:', filteredParams);
+
+      const response = await api.get('/purchase-requests/export/excel', {
+        params: filteredParams,
+        responseType: 'blob',
+        timeout: 300000, // 5분 타임아웃
+      });
+
+      // Blob 유효성 검사
+      if (!response.data || response.data.size === 0) {
+        throw new Error('빈 파일이 반환되었습니다.');
+      }
+
+      console.log('📥 파일 다운로드 완료, 크기:', response.data.size);
+
+      // 파일 다운로드 처리
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
       
       const today = new Date().toISOString().split('T')[0];
-      link.download = `purchase_requests_${today}.xlsx`;
+      link.download = `구매요청목록_${today}.xlsx`;
       
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('Excel 내보내기 실패:', error);
-      throw error;
+
+      console.log('✅ 구매요청 Excel 내보내기 완료');
+    } catch (error: any) {
+      console.error('❌ 구매요청 Excel 내보내기 실패:', error);
+      
+      // 에러 타입별 처리
+      if (error.response?.status === 404) {
+        throw new Error('내보낼 데이터가 없습니다.');
+      } else if (error.response?.status === 500) {
+        throw new Error('서버에서 파일 생성 중 오류가 발생했습니다.');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('파일 생성 시간이 너무 오래 걸립니다. 데이터를 줄여서 다시 시도해주세요.');
+      } else {
+        throw new Error(error.message || '내보내기 중 알 수 없는 오류가 발생했습니다.');
+      }
     }
   },
-
   // 승인/거절 처리
   approveRequest: async (params: {
     requestId: number;
@@ -637,25 +730,68 @@ export const inventoryApi = {
     }
   },
 
-  exportData: async (): Promise<void> => {
-    try {
-      const blob = await apiRequest.download('/inventory/export');
-      
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `inventory_${new Date().toISOString().split('T')[0]}.xlsx`;
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+  exportData: async (options?: {
+  include_receipts?: boolean;
+  include_images?: boolean;
+  search?: string;
+  category?: string;
+  brand?: string;
+  supplier_name?: string;
+  is_active?: boolean;
+}): Promise<void> => {
+  try {
+    const params = {
+      include_receipts: options?.include_receipts || false,
+      include_images: options?.include_images || false,
+      search: options?.search,
+      category: options?.category,
+      brand: options?.brand,
+      supplier_name: options?.supplier_name,
+      is_active: options?.is_active
+    };
+    
+    // undefined 값 제거
+    const filteredParams = Object.fromEntries(
+      Object.entries(params).filter(([_, value]) => value !== undefined && value !== null)
+    );
+    
+    const response = await api.get('/inventory/export', {
+      params: filteredParams,
+      responseType: 'blob'
+    });
+    if (!response.data || response.data.size === 0) {
+      throw new Error('빈 파일이 반환되었습니다.');
+    }
+    const blob = response.data;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const today = new Date();
+    const dateStr = today.toISOString().split('T')[0].replace(/-/g, '');
+    const timeStr = today.toTimeString().slice(0, 8).replace(/:/g, '');
+    link.download = `품목목록_${dateStr}_${timeStr}.xlsx`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    console.log('✅ Excel 내보내기 완료');
     } catch (error) {
-      console.error('재고 내보내기 실패:', error);
-      throw error;
+      console.error('❌ Excel 내보내기 실패:', error);
+      
+      // 에러 타입별 처리
+      if (error.response?.status === 404) {
+        throw new Error('내보낼 데이터가 없습니다.');
+      } else if (error.response?.status === 500) {
+        throw new Error('서버에서 파일 생성 중 오류가 발생했습니다.');
+      } else if (error.code === 'ECONNABORTED') {
+        throw new Error('파일 생성 시간이 너무 오래 걸립니다. 데이터를 줄여서 다시 시도해주세요.');
+      } else {
+        throw new Error(error.message || '내보내기 중 알 수 없는 오류가 발생했습니다.');
+      }
     }
   },
-
   // 품목 상세 조회
   getItem: async (itemId: number): Promise<UnifiedInventoryItem> => {
     try {
@@ -767,51 +903,113 @@ export const inventoryApi = {
   // },
 
   // Excel 일괄 업로드
-  uploadExcel: async (file: File): Promise<{
-    success: boolean;
-    created_count: number;
-    updated_count?: number;
-    errors?: Array<{ row: number; field: string; message: string }>;
-    message: string;
-  }> => {
-    try {
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      const response = await api.post('/inventory/bulk-upload', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-        timeout: 120000,
-      });
-      
-      return response.data;
-    } catch (error) {
-      console.error('Excel 업로드 실패:', error);
-      throw error;
+  // 🔥 개선된 Excel 업로드
+  // Excel 업로드 개선
+uploadExcel: async (file: File): Promise<UploadResult> => {
+  try {
+    console.log('📤 Excel 업로드 시작:', file.name, file.size);
+    
+    // 파일 유효성 검사
+    if (!file) {
+      throw new Error('파일이 선택되지 않았습니다.');
     }
-  },
+    
+    if (!file.name.match(/\.(xlsx|xls)$/i)) {
+      throw new Error('Excel 파일만 업로드 가능합니다 (.xlsx, .xls)');
+    }
+    
+    const maxSize = 10 * 1024 * 1024; // 10MB
+    if (file.size > maxSize) {
+      throw new Error('파일 크기는 10MB를 초과할 수 없습니다.');
+    }
+    
+    // FormData 생성
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    console.log('🚀 서버에 업로드 요청...');
+    
+    const response = await api.post('/inventory/bulk-upload', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      timeout: 300000, // 5분 타임아웃
+    });
+    
+    console.log('✅ 업로드 성공:', response.data);
+    
+    // 성공 응답 구조화
+    const result: UploadResult = {
+      success: response.data.success || true,
+      created_count: response.data.created_count || 0,
+      updated_count: response.data.updated_count || 0,
+      created_items: response.data.created_items || [],
+      updated_items: response.data.updated_items || [],
+      total_processed: response.data.total_processed || 0,
+      errors: response.data.errors || [],
+      message: response.data.message || '업로드가 완료되었습니다.'
+    };
+    
+    return result;
+    
+  } catch (error: any) {
+    console.error('❌ Excel 업로드 실패:', error);
+    
+    if (error.response?.data) {
+      const errorData = error.response.data;
+      throw new Error(errorData.detail || errorData.message || '업로드 중 오류가 발생했습니다.');
+    } else {
+      throw new Error(error.message || '업로드 중 알 수 없는 오류가 발생했습니다.');
+    }
+  }
+},
 
-  // 템플릿 다운로드
+  // 🔥 개선된 템플릿 다운로드
   downloadTemplate: async (): Promise<void> => {
     try {
-      const blob = await apiRequest.download('/inventory/template/download');
+      console.log('📋 템플릿 다운로드 시작...');
       
+      const response = await api.get('/inventory/template/download', {
+        responseType: 'blob',
+        timeout: 60000, // 1분 타임아웃
+      });
+      
+      // Blob 유효성 검사
+      if (!response.data || response.data.size === 0) {
+        throw new Error('빈 템플릿 파일이 반환되었습니다.');
+      }
+      
+      console.log('📥 템플릿 파일 다운로드 완료, 크기:', response.data.size);
+      
+      // 파일 다운로드 처리
+      const blob = response.data;
       const url = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = 'unified_inventory_template.xlsx';
       
+      // 파일명 생성
+      const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+      link.download = `품목등록_템플릿_${today}.xlsx`;
+      
+      // 다운로드 실행
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('템플릿 다운로드 실패:', error);
-      throw error;
+      
+      console.log('✅ 템플릿 다운로드 완료');
+    } catch (error: any) {
+      console.error('❌ 템플릿 다운로드 실패:', error);
+      
+      if (error.response?.status === 404) {
+        throw new Error('템플릿 파일을 찾을 수 없습니다.');
+      } else if (error.response?.status === 500) {
+        throw new Error('서버에서 템플릿 생성 중 오류가 발생했습니다.');
+      } else {
+        throw new Error('템플릿 다운로드 중 오류가 발생했습니다.');
+      }
     }
   },
-
   // 이미지 업로드
   uploadImage: async (itemId: number, file: File, imageType = 'general'): Promise<{
     success: boolean;
@@ -1146,22 +1344,40 @@ export const uploadApi = {
     }
   },
 
-  downloadTemplate: async (): Promise<void> => {
-    try {
-      const blob = await apiRequest.download('/upload/template/download');
-      
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'inventory_template.xlsx';
-      
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-    } catch (error) {
-      console.error('템플릿 다운로드 실패:', error);
-      throw error;
+  // 템플릿 다운로드 개선
+downloadTemplate: async (): Promise<void> => {
+  try {
+    console.log('📋 템플릿 다운로드 시작...');
+    
+    const response = await api.get('/inventory/template/download', {
+      responseType: 'blob',
+      timeout: 60000, // 1분 타임아웃
+    });
+    
+    if (!response.data || response.data.size === 0) {
+      throw new Error('빈 템플릿 파일이 반환되었습니다.');
+    }
+    
+    console.log('📥 템플릿 파일 다운로드 완료');
+    
+    // 파일 다운로드 처리
+    const blob = response.data;
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    
+    const today = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    link.download = `품목등록_템플릿_${today}.xlsx`;
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
+    
+    console.log('✅ 템플릿 다운로드 완료');
+  } catch (error: any) {
+    console.error('❌ 템플릿 다운로드 실패:', error);
+    throw new Error('템플릿 다운로드 중 오류가 발생했습니다.');
     }
   },
 };

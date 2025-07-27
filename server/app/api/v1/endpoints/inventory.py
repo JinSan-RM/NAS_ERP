@@ -1,11 +1,18 @@
 # server/app/api/v1/endpoints/inventory.py
 from typing import List, Optional, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from datetime import datetime
 import os
 import uuid
 import shutil
+import pandas as pd
+from io import BytesIO
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment
+import tempfile
+
 
 
 from app.core.config import settings  # 설정 파일에서 이미지 저장 경로 가져오기 가정
@@ -1090,3 +1097,481 @@ def create_inventory_from_purchase(
     
     return inventory_item
 
+
+# =======================================================================================
+# bulk upload for unified inventory
+# Excel 업로드 엔드포인트 (기존 inventory.py에 추가)
+@router.post("/bulk-upload", response_model=dict)
+def bulk_upload_inventory(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Excel 파일로 품목 일괄 업로드 - 개선된 버전"""
+    try:
+        print(f"📁 Excel 업로드 시작: {file.filename}, 크기: {file.size}")
+        
+        # 파일 검증 강화
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="파일명이 없습니다.")
+        
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            raise HTTPException(
+                status_code=400,
+                detail="Excel 파일만 업로드 가능합니다 (.xlsx, .xls)"
+            )
+        
+        max_size = 10 * 1024 * 1024
+        if file.size and file.size > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail="파일 크기는 10MB를 초과할 수 없습니다"
+            )
+        
+        # 파일 읽기
+        content = file.file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="빈 파일입니다.")
+        
+        df = pd.read_excel(BytesIO(content), engine='openpyxl')
+        print(f"📋 Excel 데이터 로드 완료: {len(df)} 행")
+        
+        # 필수 컬럼 검증
+        required_columns = ['품목코드', '품목명', '단위', '최소재고']
+        missing_columns = [col for col in required_columns if col not in df.columns]
+        
+        if missing_columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"필수 컬럼이 없습니다: {', '.join(missing_columns)}"
+            )
+        
+        if len(df) > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail=f"최대 1000개 행까지만 처리할 수 있습니다. 현재: {len(df)}개"
+            )
+        
+        # 데이터 처리
+        created_items = []
+        updated_items = []
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                row_num = index + 2
+                
+                # 필수 필드 검증
+                item_code = str(row['품목코드']).strip() if pd.notna(row['품목코드']) else ''
+                item_name = str(row['품목명']).strip() if pd.notna(row['품목명']) else ''
+                
+                if not item_code or item_code.lower() in ['nan', 'none', '']:
+                    errors.append({
+                        "row": row_num,
+                        "field": "품목코드",
+                        "message": "품목코드는 필수입니다"
+                    })
+                    continue
+                    
+                if not item_name or item_name.lower() in ['nan', 'none', '']:
+                    errors.append({
+                        "row": row_num,
+                        "field": "품목명",
+                        "message": "품목명은 필수입니다"
+                    })
+                    continue
+                
+                # 데이터 구성
+                inventory_data = {
+                    "item_code": item_code,
+                    "item_name": item_name,
+                    "category": str(row.get('카테고리', '')).strip() if pd.notna(row.get('카테고리')) else None,
+                    "unit": str(row.get('단위', '개')).strip() if pd.notna(row.get('단위')) else '개',
+                    "minimum_stock": int(row.get('최소재고', 0)) if pd.notna(row.get('최소재고')) else 0,
+                    "is_active": True,
+                    "created_by": "Excel업로드"
+                }
+                
+                # 기존 품목 확인
+                existing_item = crud.inventory.get_by_item_code(db=db, item_code=item_code)
+                
+                if existing_item:
+                    updated_item = crud.inventory.update(db=db, db_obj=existing_item, obj_in=inventory_data)
+                    updated_items.append(item_code)
+                else:
+                    new_item = crud.inventory.create(db=db, obj_in=inventory_data)
+                    created_items.append(item_code)
+                    
+            except Exception as item_error:
+                errors.append({
+                    "row": row_num,
+                    "field": "전체",
+                    "message": str(item_error)
+                })
+        
+        # 결과 반환
+        result = {
+            "success": True,
+            "message": f"업로드 완료: {len(created_items)}개 신규 등록, {len(updated_items)}개 업데이트",
+            "created_count": len(created_items),
+            "updated_count": len(updated_items),
+            "created_items": created_items,
+            "updated_items": updated_items,
+            "total_processed": len(created_items) + len(updated_items),
+            "errors": errors
+        }
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ 업로드 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"파일 처리 중 오류: {str(e)}")
+
+@router.get("/template/download")
+def download_inventory_template():
+    """품목 등록용 Excel 템플릿 다운로드"""
+    try:
+        print("📝 품목 템플릿 생성 시작")
+        
+        # 템플릿 데이터 생성
+        template_data = {
+            '품목코드': ['ITM-001', 'ITM-002', 'ITM-003'],
+            '품목명': ['노트북', '사무용 의자', '프린터 토너'],
+            '카테고리': ['IT장비', '사무용품', '소모품'],
+            '브랜드': ['삼성', '허먼밀러', 'HP'],
+            '사양': [
+                '14인치, 8GB RAM, 256GB SSD',
+                '인체공학적 디자인, 높이조절',
+                'LaserJet 호환 검정 토너'
+            ],
+            '단위': ['대', '개', '개'],
+            '단가': [1200000, 450000, 35000],
+            '통화': ['KRW', 'KRW', 'KRW'],
+            '위치': ['IT실', '사무실', '창고'],
+            '창고': ['본사창고', '본사창고', '소모품창고'],
+            '공급업체': ['테크월드', '오피스퍼니처', '프린터월드'],
+            '최소재고': [2, 5, 10],
+            '최대재고': [10, 20, 50],
+            '소모품여부': [False, False, True],
+            '승인필요': [True, False, False],
+            '설명': [
+                '업무용 고성능 노트북',
+                '장시간 업무에 적합한 의자',
+                '프린터 교체용 토너'
+            ],
+            '비고': [
+                '보증기간 3년',
+                '5년 AS 보장',
+                '정품만 구매'
+            ],
+            '태그': ['전자제품,업무용', '가구,사무용품', '소모품,프린터']
+        }
+        
+        # DataFrame 생성
+        df = pd.DataFrame(template_data)
+        
+        # Excel 파일 생성
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 데이터 시트 작성
+            df.to_excel(writer, sheet_name='품목목록', index=False)
+            
+            # 워크시트 참조
+            worksheet = writer.sheets['품목목록']
+            
+            # 헤더 스타일링
+            header_font = Font(bold=True, color='FFFFFF')
+            header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+            header_alignment = Alignment(horizontal='center', vertical='center')
+            
+            # 헤더에 스타일 적용
+            for col_num, column in enumerate(df.columns, 1):
+                cell = worksheet.cell(row=1, column=col_num)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+            
+            # 컬럼 너비 자동 조정
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 30)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+            
+            # 안내사항 시트 추가
+            instructions = pd.DataFrame({
+                '항목': [
+                    '템플릿 사용법',
+                    '필수 컬럼',
+                    '선택 컬럼',
+                    '데이터 형식',
+                    '주의사항',
+                    '품목코드 규칙',
+                    '카테고리 예시',
+                    '단위 예시',
+                    '통화 코드',
+                    '불린값 입력'
+                ],
+                '설명': [
+                    '이 템플릿을 다운로드하여 품목 정보를 입력한 후 업로드하세요',
+                    '품목코드, 품목명, 단위, 최소재고는 반드시 입력해야 합니다',
+                    '나머지 컬럼들은 선택사항이며, 빈 값으로 두면 기본값이 적용됩니다',
+                    '숫자는 숫자 형식으로, 텍스트는 텍스트 형식으로 입력하세요',
+                    '품목코드는 고유해야 하며, 중복 시 기존 품목이 업데이트됩니다',
+                    '영문+숫자 조합 권장 (예: ITM-001, LAPTOP-001)',
+                    'IT장비, 사무용품, 제조장비, 소모품, 기타 등',
+                    '개, 대, kg, L, 박스, 세트, m, 권 등',
+                    'KRW(원), USD(달러), EUR(유로), JPY(엔) 등',
+                    'TRUE/FALSE, 참/거짓, 1/0 형식으로 입력'
+                ]
+            })
+            
+            instructions.to_excel(writer, sheet_name='사용안내', index=False)
+            
+            # 안내사항 시트 스타일링
+            instructions_ws = writer.sheets['사용안내']
+            for col_num, column in enumerate(instructions.columns, 1):
+                cell = instructions_ws.cell(row=1, column=col_num)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+            
+            # 안내사항 시트 컬럼 너비 조정
+            instructions_ws.column_dimensions['A'].width = 20
+            instructions_ws.column_dimensions['B'].width = 60
+        
+        output.seek(0)
+        
+        # 파일명 생성
+        today = datetime.now().strftime('%Y%m%d')
+        filename = f"품목등록_템플릿_{today}.xlsx"
+        
+        print(f"✅ 템플릿 생성 완료: {filename}")
+        
+        # 응답 생성
+        return StreamingResponse(
+            BytesIO(output.getvalue()),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except Exception as e:
+        print(f"❌ 템플릿 생성 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"템플릿 생성에 실패했습니다: {str(e)}"
+        )
+
+@router.get("/export")
+def export_inventory_excel(
+    db: Session = Depends(get_db),
+    include_receipts: bool = Query(default=False, description="수령 이력 포함"),
+    include_images: bool = Query(default=False, description="이미지 정보 포함"),
+    search: Optional[str] = Query(default=None),
+    category: Optional[str] = Query(default=None),
+    brand: Optional[str] = Query(default=None),
+    supplier_name: Optional[str] = Query(default=None),
+    is_active: Optional[bool] = Query(default=None)
+):
+    """품목 목록을 Excel 파일로 내보내기"""
+    try:
+        print("📊 품목 Excel 내보내기 시작")
+        
+        # 필터 설정
+        filters = schemas.UnifiedInventoryFilter(
+            search=search,
+            category=category,
+            brand=brand,
+            supplier_name=supplier_name,
+            is_active=is_active
+        )
+        
+        # 모든 품목 조회 (제한 없음)
+        items = crud.inventory.get_multi_with_filter(
+            db=db, skip=0, limit=10000, filters=filters
+        )
+        
+        if not items:
+            raise HTTPException(
+                status_code=404,
+                detail="내보낼 품목이 없습니다"
+            )
+        
+        # 기본 품목 데이터
+        main_data = []
+        for item in items:
+            row = {
+                '품목코드': item.item_code,
+                '품목명': item.item_name,
+                '카테고리': item.category or '',
+                '브랜드': item.brand or '',
+                '사양': item.specifications or '',
+                '단위': item.unit,
+                '단가': item.unit_price or 0,
+                '통화': item.currency,
+                '총수령수량': item.total_received,
+                '현재수량': item.current_quantity,
+                '예약수량': item.reserved_quantity,
+                '사용가능수량': item.available_quantity,
+                '최소재고': item.minimum_stock,
+                '최대재고': item.maximum_stock or '',
+                '위치': item.location or '',
+                '창고': item.warehouse or '',
+                '공급업체': item.supplier_name or '',
+                '공급업체연락처': item.supplier_contact or '',
+                '최근수령일': item.last_received_date.strftime('%Y-%m-%d') if item.last_received_date else '',
+                '최근수령자': item.last_received_by or '',
+                '재고상태': item.stock_status,
+                '소모품여부': item.is_consumable,
+                '승인필요': item.requires_approval,
+                '활성상태': item.is_active,
+                '설명': item.description or '',
+                '비고': item.notes or '',
+                '태그': ', '.join(item.tags) if item.tags else '',
+                '생성일': item.created_at.strftime('%Y-%m-%d %H:%M:%S'),
+                '생성자': item.created_by or '',
+                '수정일': item.updated_at.strftime('%Y-%m-%d %H:%M:%S') if item.updated_at else '',
+                '수정자': item.updated_by or ''
+            }
+            
+            if include_images:
+                row['메인이미지'] = item.main_image_url or ''
+                row['추가이미지수'] = len(item.image_urls) if item.image_urls else 0
+            
+            main_data.append(row)
+        
+        # Excel 파일 생성
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 메인 데이터 시트
+            main_df = pd.DataFrame(main_data)
+            main_df.to_excel(writer, sheet_name='품목목록', index=False)
+            
+            # 메인 시트 스타일링
+            main_ws = writer.sheets['품목목록']
+            
+            # 헤더 스타일링
+            header_font = Font(bold=True, color='FFFFFF')
+            header_fill = PatternFill(start_color='366092', end_color='366092', fill_type='solid')
+            header_alignment = Alignment(horizontal='center', vertical='center')
+            
+            for col_num, column in enumerate(main_df.columns, 1):
+                cell = main_ws.cell(row=1, column=col_num)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+            
+            # 컬럼 너비 자동 조정
+            for column in main_ws.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 40)
+                main_ws.column_dimensions[column_letter].width = adjusted_width
+            
+            # 수령 이력 시트 (선택사항)
+            if include_receipts:
+                receipt_data = []
+                for item in items:
+                    if item.receipt_history:
+                        for receipt in item.receipt_history:
+                            receipt_row = {
+                                '품목코드': item.item_code,
+                                '품목명': item.item_name,
+                                '수령번호': receipt.get('receipt_number', ''),
+                                '수령수량': receipt.get('received_quantity', 0),
+                                '수령자': receipt.get('receiver_name', ''),
+                                '수령자이메일': receipt.get('receiver_email', ''),
+                                '부서': receipt.get('department', ''),
+                                '수령일': receipt.get('received_date', ''),
+                                '위치': receipt.get('location', ''),
+                                '상태': receipt.get('condition', ''),
+                                '비고': receipt.get('notes', '')
+                            }
+                            receipt_data.append(receipt_row)
+                
+                if receipt_data:
+                    receipt_df = pd.DataFrame(receipt_data)
+                    receipt_df.to_excel(writer, sheet_name='수령이력', index=False)
+                    
+                    # 수령이력 시트 스타일링
+                    receipt_ws = writer.sheets['수령이력']
+                    for col_num, column in enumerate(receipt_df.columns, 1):
+                        cell = receipt_ws.cell(row=1, column=col_num)
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.alignment = header_alignment
+            
+            # 통계 시트
+            stats_data = {
+                '구분': [
+                    '전체 품목 수',
+                    '활성 품목 수',
+                    '비활성 품목 수',
+                    '재고 부족 품목',
+                    '재고 없는 품목',
+                    '소모품 수',
+                    '승인 필요 품목',
+                    '총 재고 가치'
+                ],
+                '값': [
+                    len([item for item in items]),
+                    len([item for item in items if item.is_active]),
+                    len([item for item in items if not item.is_active]),
+                    len([item for item in items if item.is_low_stock]),
+                    len([item for item in items if item.current_quantity == 0]),
+                    len([item for item in items if item.is_consumable]),
+                    len([item for item in items if item.requires_approval]),
+                    f"{sum(item.total_value or 0 for item in items):,.0f} 원"
+                ]
+            }
+            
+            stats_df = pd.DataFrame(stats_data)
+            stats_df.to_excel(writer, sheet_name='통계', index=False)
+            
+            # 통계 시트 스타일링
+            stats_ws = writer.sheets['통계']
+            for col_num, column in enumerate(stats_df.columns, 1):
+                cell = stats_ws.cell(row=1, column=col_num)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = header_alignment
+            
+            stats_ws.column_dimensions['A'].width = 20
+            stats_ws.column_dimensions['B'].width = 20
+        
+        output.seek(0)
+        
+        # 파일명 생성
+        today = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"품목목록_{today}.xlsx"
+        
+        print(f"✅ Excel 내보내기 완료: {filename}")
+        
+        # 응답 생성
+        return StreamingResponse(
+            BytesIO(output.getvalue()),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={filename}"}
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Excel 내보내기 실패: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Excel 내보내기에 실패했습니다: {str(e)}"
+        )

@@ -26,7 +26,7 @@ interface ExcelBulkUploadProps {
 interface UploadResult {
   success: boolean;
   created_count: number;
-  request_numbers: string[];
+  request_numbers: string[]; 
   errors?: Array<{
     row: number;
     field: string;
@@ -368,29 +368,58 @@ const ExcelBulkUpload: React.FC<ExcelBulkUploadProps> = ({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadResult, setUploadResult] = useState<UploadResult | null>(null);
+  const [currentStep, setCurrentStep] = useState<'upload' | 'processing' | 'result'>('upload');
 
   const uploadMutation = useMutation({
     mutationFn: purchaseApi.uploadExcel,
-    onSuccess: (result) => {
-      setUploadResult({
-        success: true,
-        created_count: result.created_count,
-        request_numbers: result.request_numbers,
-      });
+    onMutate: () => {
+      setCurrentStep('processing');
+      setUploadProgress(0);
+      
+      // 진행률 시뮬레이션
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) {
+            clearInterval(progressInterval);
+            return 90;
+          }
+          return prev + Math.random() * 10;
+        });
+      }, 500);
+      
+      return { progressInterval };
+    },
+    onSuccess: (result: UploadResult, _, context) => {
+      if (context?.progressInterval) {
+        clearInterval(context.progressInterval);
+      }
+      
+      setUploadProgress(100);
+      setCurrentStep('result');
+      setUploadResult(result);
+      
       queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      toast.success(`${result.created_count}건의 구매 요청이 등록되었습니다.`);
+      
+      const successMsg = `${result.created_count}개 구매요청이 성공적으로 등록되었습니다!`;
+      toast.success(successMsg);
+      
       onSuccess();
     },
-    onError: (error: any) => {
-      const errorData = error.response?.data;
+    onError: (error: any, _, context) => {
+      if (context?.progressInterval) {
+        clearInterval(context.progressInterval);
+      }
+      
+      setCurrentStep('result');
       setUploadResult({
         success: false,
         created_count: 0,
         request_numbers: [],
-        errors: errorData?.errors || [{ row: 0, field: 'file', message: error.message }],
+        errors: [{ row: 0, field: 'file', message: error.message }],
       });
-      toast.error('업로드 중 오류가 발생했습니다.');
+      
+      toast.error(error.message);
     },
   });
 
@@ -632,7 +661,7 @@ const ExcelBulkUpload: React.FC<ExcelBulkUploadProps> = ({
             </div>
 
             {/* 성공한 요청 번호들 */}
-            {uploadResult.success && uploadResult.request_numbers.length > 0 && (
+            {uploadResult.success && uploadResult.request_numbers?.length > 0 && (
               <div className="request-numbers">
                 <div className="numbers-title">생성된 구매 요청 번호:</div>
                 <div className="numbers-list">

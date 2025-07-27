@@ -1125,6 +1125,11 @@ const PurchaseRequestPage: React.FC = () => {
                 onClick={() => setIsExcelModalOpen(true)}
                 size="sm"
                 title="Excel 일괄 업로드"
+                style={{
+                  background: 'linear-gradient(135deg, #10b981, #059669)',
+                  color: 'white',
+                  borderColor: '#10b981'
+                }}
               >
                 <Upload size={16} />
                 <span>Excel 업로드</span>

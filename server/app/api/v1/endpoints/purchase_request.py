@@ -1,9 +1,7 @@
-
-
 # server/app/api/v1/endpoints/purchase_request.py - 완전히 수정된 버전
-
 from typing import List, Optional, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func, or_, and_
 import pandas as pd
@@ -669,76 +667,195 @@ def delete_purchase_request(
 
 @router.post("/bulk-upload", response_model=dict)
 def bulk_upload_purchase_requests(
-    *,
-    db: Session = Depends(get_db),
-    file: UploadFile = File(..., description="Excel 파일")
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
 ):
-    """
-    Excel 파일을 통한 구매 요청 대량 업로드
-    """
-    if not file.filename or not file.filename.endswith(('.xlsx', '.xls')):
-        raise HTTPException(
-            status_code=400,
-            detail="Excel 파일만 업로드 가능합니다 (.xlsx, .xls)"
-        )
-    
+    """Excel 파일로 구매 요청 일괄 업로드 - 개선된 버전"""
     try:
+        print(f"📁 구매요청 Excel 업로드 시작: {file.filename}, 크기: {file.size}")
+        
+        # 파일 검증 강화
+        if not file.filename:
+            raise HTTPException(status_code=400, detail="파일명이 없습니다.")
+        
+        if not file.filename.lower().endswith(('.xlsx', '.xls')):
+            raise HTTPException(
+                status_code=400,
+                detail="Excel 파일만 업로드 가능합니다 (.xlsx, .xls)"
+            )
+        
+        max_size = 10 * 1024 * 1024
+        if file.size and file.size > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail="파일 크기는 10MB를 초과할 수 없습니다"
+            )
+        
         # 파일 읽기
         content = file.file.read()
-        df = pd.read_excel(BytesIO(content))
+        if not content:
+            raise HTTPException(status_code=400, detail="빈 파일입니다.")
         
-        # 필수 컬럼 확인
+        df = pd.read_excel(BytesIO(content), engine='openpyxl')
+        print(f"📋 Excel 데이터 로드 완료: {len(df)} 행")
+        
+        # 필수 컬럼 검증
         required_columns = ['품목명', '수량', '요청자명', '부서', '구매사유']
         missing_columns = [col for col in required_columns if col not in df.columns]
+        
         if missing_columns:
             raise HTTPException(
                 status_code=400,
-                detail=f"필수 컬럼이 없습니다: {missing_columns}"
+                detail=f"필수 컬럼이 없습니다: {', '.join(missing_columns)}"
             )
         
-        # 데이터 변환
-        requests_data = []
+        if len(df) > 1000:
+            raise HTTPException(
+                status_code=400,
+                detail=f"최대 1000개 행까지만 처리할 수 있습니다. 현재: {len(df)}개"
+            )
+        
+        # 데이터 처리
+        created_requests = []
+        errors = []
+        
         for index, row in df.iterrows():
             try:
-                request_data = PurchaseRequestCreate(
-                    item_name=str(row['품목명']).strip(),
+                row_num = index + 2
+                
+                # 필수 필드 검증
+                item_name = str(row['품목명']).strip() if pd.notna(row['품목명']) else ''
+                requester_name = str(row['요청자명']).strip() if pd.notna(row['요청자명']) else ''
+                department = str(row['부서']).strip() if pd.notna(row['부서']) else ''
+                justification = str(row['구매사유']).strip() if pd.notna(row['구매사유']) else ''
+                
+                if not item_name:
+                    errors.append({
+                        "row": row_num,
+                        "field": "품목명",
+                        "message": "품목명은 필수입니다"
+                    })
+                    continue
+                    
+                if not requester_name:
+                    errors.append({
+                        "row": row_num,
+                        "field": "요청자명",
+                        "message": "요청자명은 필수입니다"
+                    })
+                    continue
+                
+                if not department:
+                    errors.append({
+                        "row": row_num,
+                        "field": "부서",
+                        "message": "부서는 필수입니다"
+                    })
+                    continue
+                
+                if not justification:
+                    errors.append({
+                        "row": row_num,
+                        "field": "구매사유",
+                        "message": "구매사유는 필수입니다"
+                    })
+                    continue
+                
+                # 수량 검증
+                try:
+                    quantity = int(row['수량']) if pd.notna(row['수량']) else 1
+                    if quantity <= 0:
+                        quantity = 1
+                except (ValueError, TypeError):
+                    errors.append({
+                        "row": row_num,
+                        "field": "수량",
+                        "message": "수량은 1 이상의 숫자여야 합니다"
+                    })
+                    continue
+                
+                # 예상단가 검증
+                try:
+                    estimated_unit_price = float(row['예상단가']) if pd.notna(row['예상단가']) and row['예상단가'] != '' else None
+                except (ValueError, TypeError):
+                    estimated_unit_price = None
+                
+                from datetime import datetime as dt  # 명확한 import
+                now = dt.now()
+                # 구매요청 데이터 구성
+                request_number = f"PR{now.strftime('%Y%m%d')}{now.microsecond//1000:03d}"
+                
+                # 🔥 변경점: DB 객체 직접 생성 (CRUD 대신)
+                new_request = DBPurchaseRequest(
+                    request_number=request_number,
+                    item_name=item_name,
                     specifications=str(row.get('사양', '')).strip() if pd.notna(row.get('사양')) else None,
-                    quantity=int(row['수량']) if pd.notna(row['수량']) else 1,
+                    quantity=quantity,
                     unit=str(row.get('단위', '개')).strip() if pd.notna(row.get('단위')) else '개',
-                    estimated_unit_price=float(row['예상단가']) if pd.notna(row.get('예상단가')) else None,
-                    preferred_supplier=str(row.get('공급업체', '')).strip() if pd.notna(row.get('공급업체')) else None,
-                    category=str(row.get('카테고리', '')).strip() if pd.notna(row.get('카테고리')) else None,
-                    urgency=UrgencyLevel(row.get('긴급도', 'normal')) if pd.notna(row.get('긴급도')) else UrgencyLevel.NORMAL,
-                    requester_name=str(row['요청자명']).strip(),
-                    requester_email=str(row.get('요청자이메일', '')).strip() if pd.notna(row.get('요청자이메일')) else None,
-                    department=str(row['부서']).strip(),
-                    phone_number=str(row.get('연락처', '')).strip() if pd.notna(row.get('연락처')) else None,
-                    project=str(row.get('프로젝트', '')).strip() if pd.notna(row.get('프로젝트')) else None,
-                    budget_code=str(row.get('예산코드', '')).strip() if pd.notna(row.get('예산코드')) else None,
-                    justification=str(row['구매사유']).strip(),
-                    additional_notes=str(row.get('비고', '')).strip() if pd.notna(row.get('비고')) else None
+                    estimated_unit_price=estimated_unit_price,
+                    total_budget=estimated_unit_price * quantity if estimated_unit_price else None,
+                    currency=str(row.get('통화', 'KRW')).strip() if pd.notna(row.get('통화')) else 'KRW',
+                    category='OFFICE_SUPPLIES',
+                    urgency=str(row.get('긴급도', 'NORMAL')).strip().upper() if pd.notna(row.get('긴급도')) else 'NORMAL',
+                    purchase_method=str(row.get('구매방법', 'DIRECT')).strip() if pd.notna(row.get('구매방법')) else 'DIRECT',
+                    requester_name=requester_name,
+                    department=department,
+                    justification=justification,
+                    status='SUBMITTED',
+                    request_date=now,
+                    is_active=True
                 )
-                requests_data.append(request_data)
-            except Exception as e:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"행 {index + 2}에서 오류: {str(e)}"
-                )
+                
+                # 긴급도 검증 및 정규화
+                valid_urgencies = ['LOW', 'NORMAL', 'HIGH', 'URGENT']
+                if new_request.urgency not in valid_urgencies:
+                    new_request.urgency = 'NORMAL'
+                
+                # 🔥 변경점: DB에 직접 추가
+                db.add(new_request)
+                db.flush()  # ID를 얻기 위해 flush
+                
+                created_requests.append(new_request.request_number)
+                print(f"✅ 구매요청 생성 성공: {new_request.request_number}")
+                    
+            except Exception as item_error:
+                print(f"❌ 구매요청 생성 오류 (행 {row_num}): {item_error}")
+                errors.append({
+                    "row": row_num,
+                    "field": "전체",
+                    "message": str(item_error)
+                })
         
-        # 대량 생성
-        created_requests = crud.purchase_request.bulk_create(db=db, items=requests_data)
+        # 🔥 모든 처리가 완료된 후 한 번에 commit
+        try:
+            db.commit()
+            print(f"💾 {len(created_requests)}개 구매요청 커밋 완료")
+        except Exception as commit_error:
+            db.rollback()
+            print(f"❌ 커밋 실패: {commit_error}")
+            raise HTTPException(status_code=500, detail=f"데이터베이스 저장 실패: {str(commit_error)}")
         
-        return {
-            "message": f"{len(created_requests)}개의 구매 요청이 성공적으로 업로드되었습니다.",
+        # 결과 반환
+        result = {
+            "success": True,
+            "message": f"업로드 완료: {len(created_requests)}개 구매요청이 등록되었습니다",
             "created_count": len(created_requests),
-            "request_numbers": [req.request_number for req in created_requests]
+            "request_numbers": created_requests,
+            "total_processed": len(created_requests),
+            "errors": errors
         }
         
-    except pd.errors.EmptyDataError:
-        raise HTTPException(status_code=400, detail="Excel 파일이 비어있습니다.")
+        print(f"🎉 구매요청 업로드 완료: {result}")
+        return result
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"파일 처리 중 오류: {str(e)}")
-
+        print(f"❌ 구매요청 업로드 오류: {e}")
+        import traceback
+        print(f"📋 스택 트레이스: {traceback.format_exc()}")
+        raise HTTPException(status_code=500, detail=f"파일 처리 중 오류: {str(e)}")
+    
 @router.get("/export/excel")
 def export_purchase_requests_excel(
     db: Session = Depends(get_db),
@@ -754,144 +871,246 @@ def export_purchase_requests_excel(
     구매 요청 목록을 Excel 파일로 내보내기
     """
     # 필터 설정
-    filters = PurchaseRequestFilter(
-        search=search,
-        status=status,
-        urgency=urgency,
-        department=department,
-        category=category,
-        date_from=pd.to_datetime(date_from) if date_from else None,
-        date_to=pd.to_datetime(date_to) if date_to else None
-    )
-    
-    # 모든 데이터 조회 (제한 없음)
-    requests = crud.purchase_request.get_multi_with_filter(
-        db=db, skip=0, limit=10000, filters=filters
-    )
-    
-    # DataFrame 생성
-    data = []
-    for req in requests:
-        data.append({
-            '요청번호': req.request_number,
-            '품목명': req.item_name,
-            '사양': req.specifications or '',
-            '수량': req.quantity,
-            '단위': req.unit,
-            '예상단가': req.estimated_unit_price or 0,
-            '총예산': req.total_budget or 0,
-            '공급업체': req.preferred_supplier or '',
-            '카테고리': req.category or '',
-            '긴급도': req.urgency.value,
-            '상태': req.status.value,
-            '요청자': req.requester_name,
-            '부서': req.department,
-            '프로젝트': req.project or '',
-            '예산코드': req.budget_code or '',
-            '구매사유': req.justification,
-            '요청일': req.created_at.strftime('%Y-%m-%d'),
-            '승인자': req.approver_name or '',
-            '승인일': req.approval_date.strftime('%Y-%m-%d') if req.approval_date else '',
-            '비고': req.additional_notes or ''
-        })
-    
-    df = pd.DataFrame(data)
-    
-    # Excel 파일 생성
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='구매요청목록', index=False)
+    try:
+        filters = PurchaseRequestFilter(
+            search=search,
+            status=status,
+            urgency=urgency,
+            department=department,
+            category=category,
+            date_from=pd.to_datetime(date_from) if date_from else None,
+            date_to=pd.to_datetime(date_to) if date_to else None
+        )
         
-        # 워크시트 스타일링
-        worksheet = writer.sheets['구매요청목록']
+        # 모든 데이터 조회 (제한 없음)
+        requests = crud.purchase_request.get_multi_with_filter(
+            db=db, skip=0, limit=10000, filters=filters
+        )
         
-        # 컬럼 너비 조정
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            worksheet.column_dimensions[column_letter].width = adjusted_width
-    
-    output.seek(0)
-    
-    # 파일명 생성
-    from datetime import datetime
-    today = datetime.now().strftime('%Y%m%d')
-    filename = f"purchase_requests_{today}.xlsx"
-    
-    # 응답 생성
-    response = Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    response.headers["Content-Disposition"] = f"attachment; filename={filename}"
-    
-    return response
+        if not requests:
+                raise HTTPException(
+                    status_code=404,
+                    detail="내보낼 구매요청이 없습니다"
+                )
+        
+        print(f"📋 내보낼 구매요청 수: {len(requests)}")
+        
+        # DataFrame 생성
+        data = []
+        for req in requests:
+            data.append({
+                '요청번호': req.id,
+                '품목명': req.item_name,
+                '사양': req.specifications or '',
+                '수량': req.quantity,
+                '단위': req.unit,
+                '예상단가': req.estimated_unit_price or 0,
+                '총예산': req.total_budget or 0,
+                # '공급업체': req.preferred_supplier or '',
+                '카테고리': req.category or 'OFFICE_SUPPLIES',
+                '긴급도': req.urgency or 'NORMAL',
+                '상태': req.status or 'SUBMITTED',
+                '요청자': req.requester_name or '사용자',
+                '부서': req.department or '사무관리팀',
+                # '프로젝트': req.project or '',
+                # '예산코드': req.budget_code or '',
+                '구매사유': req.justification,
+                '요청일': req.created_at.strftime('%Y-%m-%d'),
+                # '승인자': req.approver_name or '',
+                # '승인일': req.approval_date.strftime('%Y-%m-%d') if req.approval_date else '',
+                # '비고': req.additional_notes or ''
+            })
+        
+        df = pd.DataFrame(data)
+        
+        # Excel 파일 생성
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='구매요청목록', index=False)
+            
+            # 워크시트 스타일링
+            worksheet = writer.sheets['구매요청목록']
+            
+            
+            # 컬럼 너비 조정
+            for column in worksheet.columns:
+                max_length = 0
+                column_letter = column[0].column_letter
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                worksheet.column_dimensions[column_letter].width = adjusted_width
+        
+        output.seek(0)
+        
+        # 파일명 생성
+        from datetime import datetime
+        today = datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"purchase_requests_{today}.xlsx"  # 영문 파일명 사용
+        
+        print(f"✅ 구매요청 Excel 내보내기 완료: {filename}")
+        
+        # 🔥 한글 파일명을 위한 RFC 5987 인코딩 사용
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(f"구매요청목록_{today}.xlsx".encode('utf-8'))
+        
+        return StreamingResponse(
+            BytesIO(output.getvalue()),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}; filename*=UTF-8''{encoded_filename}"
+            }
+        )
+            
+    except Exception as e:
+        print(f"❌ 구매요청 Excel 내보내기 실패: {e}")
+        import traceback
+        print(f"스택 트레이스: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Excel 내보내기에 실패했습니다: {str(e)}"
+        )
 
 @router.get("/template/download")
-def download_upload_template():
-    """
-    구매 요청 업로드용 Excel 템플릿 다운로드
-    """
-    # 템플릿 데이터 생성
-    template_data = {
-        '품목명': ['노트북', '사무용 의자'],
-        '사양': ['14인치, 8GB RAM, 256GB SSD', '인체공학적 디자인'],
-        '수량': [2, 5],
-        '단위': ['대', '개'],
-        '예상단가': [1200000, 250000],
-        '공급업체': ['테크월드', '오피스퍼니처'],
-        '카테고리': ['전자기기', '사무용품'],
-        '긴급도': ['normal', 'high'],
-        '요청자명': ['김철수', '이영희'],
-        '요청자이메일': ['kim@company.com', 'lee@company.com'],
-        '부서': ['개발팀', '총무부'],
-        '연락처': ['010-1234-5678', '010-8765-4321'],
-        '프로젝트': ['신제품개발', '사무환경개선'],
-        '예산코드': ['DEV001', 'ADM002'],
-        '구매사유': ['신입사원 업무용', '기존 의자 노후화'],
-        '비고': ['고성능 모델 필요', '인체공학적 디자인 우선']
-    }
-    
-    df = pd.DataFrame(template_data)
-    
-    # Excel 파일 생성
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, sheet_name='구매요청템플릿', index=False)
+def download_purchase_request_template():
+    """구매 요청 등록용 Excel 템플릿 다운로드 - 개선된 버전"""
+    try:
+        print("📝 구매요청 템플릿 생성 시작")
         
-        # 워크시트 스타일링
-        worksheet = writer.sheets['구매요청템플릿']
+        # 상세한 템플릿 데이터
+        template_data = {
+            '품목명': ['노트북 컴퓨터', '사무용 의자', 'A4 복사용지', '프로젝터', '정수기'],
+            '사양': [
+                '15인치, Intel i7, 16GB RAM, 512GB SSD',
+                '인체공학적 디자인, 높이조절 가능',
+                '80g/㎡, 500매/팩',
+                '3000안시, Full HD',
+                '냉온수 겸용, 직수형'
+            ],
+            '수량': [2, 5, 10, 1, 1],
+            '단위': ['대', '개', '박스', '대', '대'],
+            '예상단가': [1500000, 450000, 3500, 800000, 300000],
+            '통화': ['KRW', 'KRW', 'KRW', 'KRW', 'KRW'],
+            '카테고리': ['IT장비', '사무용품', '소모품', 'AV장비', '사무기기'],
+            '긴급도': ['high', 'normal', 'low', 'normal', 'normal'],
+            # '구매방법': ['입찰', '수의계약', '직접구매', '입찰', '수의계약'],
+            '요청자명': ['김철수', '이영희', '박민수', '최지영', '정우진'],
+            # '요청자이메일': ['kim@company.com', 'lee@company.com', 'park@company.com', 'choi@company.com', 'jung@company.com'],
+            '부서': ['개발팀', '총무부', '기획팀', '마케팅팀', '인사팀'],
+            # '직급': ['대리', '과장', '사원', '차장', '팀장'],
+            # '연락처': ['010-1234-5678', '010-2345-6789', '010-3456-7890', '010-4567-8901', '010-5678-9012'],
+            '프로젝트': ['신제품 개발', '', '사무환경 개선', '고객 프레젠테이션', ''],
+            # '예산코드': ['DEV2024-01', 'ADM2024-02', 'PLN2024-03', 'MKT2024-04', 'HR2024-05'],
+            # '비용센터': ['개발부', '총무부', '기획부', '마케팅부', '인사부'],
+            # '선호공급업체': ['테크월드', '오피스퍼니처', '종이나라', 'AV시스템', '정수기월드'],
+            # '공급업체연락처': ['02-1234-5678', '02-2345-6789', '02-3456-7890', '02-4567-8901', '02-5678-9012'],
+            '구매사유': [
+                '기존 노트북 노후화로 교체 필요',
+                '신규 직원 증가로 의자 부족',
+                '복사용지 재고 부족',
+                '고객 미팅용 프로젝터 필요',
+                '기존 정수기 고장으로 교체'
+            ],
+            # '비즈니스케이스': [
+            #     '개발 생산성 향상을 위한 필수 장비',
+            #     '직원 건강 및 업무 효율성 증대',
+            #     '업무 연속성 보장을 위한 필수 소모품',
+            #     '고객 서비스 품질 향상',
+            #     '직원 복리후생 개선'
+            # ],
+            # '비고': [
+            #     'Windows 11 Pro 설치 요청',
+            #     '색상: 검정 또는 회색',
+            #     '친환경 인증 제품 우선',
+            #     '무선 연결 지원 필수',
+            #     '정기 관리 서비스 포함'
+            # ]
+        }
         
-        # 컬럼 너비 조정
-        for column in worksheet.columns:
-            max_length = 0
-            column_letter = column[0].column_letter
-            for cell in column:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 30)
-            worksheet.column_dimensions[column_letter].width = adjusted_width
-    
-    output.seek(0)
-    
-    # 응답 생성
-    response = Response(
-        content=output.getvalue(),
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
-    response.headers["Content-Disposition"] = "attachment; filename=purchase_request_template.xlsx"
-    
-    return response
+        df = pd.DataFrame(template_data)
+        
+        # Excel 파일 생성 (스타일링 포함)
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            # 메인 데이터 시트
+            df.to_excel(writer, sheet_name='구매요청목록', index=False)
+            
+            worksheet = writer.sheets['구매요청목록']
+            
+            # 컬럼 너비 조정
+            column_widths = {
+                '품목명': 20, '사양': 35, '수량': 8, '단위': 8, '예상단가': 12,
+                '통화': 8, '카테고리': 12, '긴급도': 10, '부서': 12, '구매사유': 25,
+            }
+            
+            for col_num, column in enumerate(df.columns, 1):
+                column_letter = worksheet.cell(row=1, column=col_num).column_letter
+                width = column_widths.get(column, 15)
+                worksheet.column_dimensions[column_letter].width = width
+            
+            # 사용안내 시트
+            instructions_data = {
+                '항목': [
+                    '1. 기본 사용법',
+                    '2. 필수 컬럼',
+                    '3. 선택 컬럼',
+                    '4. 긴급도 옵션',
+                    '5. 구매방법 옵션',
+                    '6. 부서 예시',
+                    '7. 카테고리 예시',
+                    '8. 데이터 형식',
+                    '9. 주의사항',
+                    '10. 파일 제한'
+                ],
+                '설명': [
+                    '이 템플릿을 다운로드하여 구매요청 정보를 입력한 후 업로드하세요.',
+                    '품목명, 수량, 요청자명, 부서, 구매사유는 반드시 입력해야 합니다.',
+                    '나머지 컬럼들은 선택사항이며, 빈 값으로 두면 기본값이 적용됩니다.',
+                    'low(낮음), normal(보통), high(높음), urgent(긴급) 중 하나를 입력하세요.',
+                    '직접구매, 수의계약, 입찰, 리스, 기타 중 하나를 입력하세요.',
+                    '개발팀, 총무부, 기획팀, 마케팅팀, 인사팀, 재무팀, 영업팀 등',
+                    'IT장비, 사무용품, 소모품, AV장비, 사무기기, 제조장비, 청소용품 등',
+                    '수량과 예상단가는 숫자로 입력하고, 이메일은 올바른 형식으로 입력하세요.',
+                    '요청자명과 부서는 정확히 입력해주세요. 승인 프로세스에 영향을 줍니다.',
+                    '최대 1,000개 요청, 파일 크기 10MB 이하, .xlsx 또는 .xls 형식만 지원'
+                ]
+            }
+            
+            instructions_df = pd.DataFrame(instructions_data)
+            instructions_df.to_excel(writer, sheet_name='사용안내', index=False)
+            
+            # 안내사항 시트 스타일링
+            instructions_ws = writer.sheets['사용안내']
+            
+            instructions_ws.column_dimensions['A'].width = 20
+            instructions_ws.column_dimensions['B'].width = 80
+        
+        output.seek(0)
+        
+        today = datetime.now().strftime('%Y%m%d')
+        filename = f"purchase_requests_{today}.xlsx"  # 영문 파일명 사용
+        
+        print(f"✅ 구매요청 Excel 내보내기 완료: {filename}")
+        
+        # 🔥 한글 파일명을 위한 RFC 5987 인코딩 사용
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(f"구매요청목록_{today}.xlsx".encode('utf-8'))
+        
+        return StreamingResponse(
+            BytesIO(output.getvalue()),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}; filename*=UTF-8''{encoded_filename}"
+            }
+        )
+        
+    except Exception as e:
+        print(f"❌ 구매요청 템플릿 생성 실패: {e}")
+        raise HTTPException(status_code=500, detail=f"템플릿 생성에 실패했습니다: {str(e)}")
 
 # server/app/api/v1/endpoints/purchase_request.py 에 추가할 엔드포인트
 
