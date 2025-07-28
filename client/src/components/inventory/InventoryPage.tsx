@@ -1034,7 +1034,7 @@ const InventoryPage: React.FC = () => {
               품목 추가
             </Button>
             {/* 🔥 새로 추가: Excel 업로드 버튼 */}
-            <Button
+            {/* <Button
               variant="outline"
               onClick={() => setIsExcelUploadModalOpen(true)}
               style={{
@@ -1044,11 +1044,11 @@ const InventoryPage: React.FC = () => {
               }}
             >
               <span>Excel 업로드</span>
-            </Button>
-            <Button onClick={() => setIsFormModalOpen(true)}>
+            </Button> */}
+            {/* <Button onClick={() => setIsFormModalOpen(true)}>
               <Plus size={16} />
               품목 추가
-            </Button>
+            </Button> */}
           </ActionButtons>
         </FilterContainer>
 

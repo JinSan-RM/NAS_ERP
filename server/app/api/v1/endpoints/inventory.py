@@ -1239,7 +1239,6 @@ def download_inventory_template():
             '품목코드': ['ITM-001', 'ITM-002', 'ITM-003'],
             '품목명': ['노트북', '사무용 의자', '프린터 토너'],
             '카테고리': ['IT장비', '사무용품', '소모품'],
-            '브랜드': ['삼성', '허먼밀러', 'HP'],
             '사양': [
                 '14인치, 8GB RAM, 256GB SSD',
                 '인체공학적 디자인, 높이조절',
@@ -1249,12 +1248,8 @@ def download_inventory_template():
             '단가': [1200000, 450000, 35000],
             '통화': ['KRW', 'KRW', 'KRW'],
             '위치': ['IT실', '사무실', '창고'],
-            '창고': ['본사창고', '본사창고', '소모품창고'],
-            '공급업체': ['테크월드', '오피스퍼니처', '프린터월드'],
             '최소재고': [2, 5, 10],
             '최대재고': [10, 20, 50],
-            '소모품여부': [False, False, True],
-            '승인필요': [True, False, False],
             '설명': [
                 '업무용 고성능 노트북',
                 '장시간 업무에 적합한 의자',
@@ -1265,7 +1260,6 @@ def download_inventory_template():
                 '5년 AS 보장',
                 '정품만 구매'
             ],
-            '태그': ['전자제품,업무용', '가구,사무용품', '소모품,프린터']
         }
         
         # DataFrame 생성
@@ -1351,15 +1345,18 @@ def download_inventory_template():
         
         # 파일명 생성
         today = datetime.now().strftime('%Y%m%d')
-        filename = f"품목등록_템플릿_{today}.xlsx"
+        filename = f"inventory_apply_template{today}.xlsx"
         
-        print(f"✅ 템플릿 생성 완료: {filename}")
+        # 🔥 한글 파일명을 위한 RFC 5987 인코딩 사용
+        import urllib.parse
+        encoded_filename = urllib.parse.quote(f"구매요청목록_{today}.xlsx".encode('utf-8'))
         
-        # 응답 생성
         return StreamingResponse(
             BytesIO(output.getvalue()),
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}; filename*=UTF-8''{encoded_filename}"
+            }
         )
         
     except Exception as e:

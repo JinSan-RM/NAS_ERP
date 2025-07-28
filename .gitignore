@@ -1,2 +1,8 @@
 node_modules
 data
+*.pyc
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.log
