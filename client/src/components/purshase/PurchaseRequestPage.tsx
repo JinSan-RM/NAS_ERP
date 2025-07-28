@@ -497,7 +497,7 @@ const PurchaseRequestPage: React.FC = () => {
         const updateResult = await purchaseApi.updateRequest(requestId, {
           status: 'COMPLETED',
           completed_date: new Date().toISOString(),
-          completed_by: '현재사용자'
+          completed_by: requestData.requester_name
         });
         console.log('✅ 구매 요청 상태 업데이트 성공:', updateResult);
 
@@ -522,7 +522,7 @@ const PurchaseRequestPage: React.FC = () => {
           purchase_request_id: requestId,
           notes: `구매요청 #${requestId}에서 자동 생성됨`,
           is_active: true,
-          created_by: '현재사용자',
+          created_by: requestData.requester_name,
           department: requestData.department
         };
 
@@ -599,7 +599,7 @@ const PurchaseRequestPage: React.FC = () => {
                     ...item,
                     status: 'COMPLETED',
                     completed_date: new Date().toISOString(),
-                    completed_by: '현재사용자',
+                    completed_by: result.inventory_created,
                     inventory_item_id: result.inventory_item_id,
                     inventory_item_code: result.inventory_item_code
                   };

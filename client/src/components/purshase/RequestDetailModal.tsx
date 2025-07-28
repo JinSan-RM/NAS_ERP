@@ -527,6 +527,17 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
 
             <InfoCard>
               <div className="info-header">
+                <Package className="info-icon" size={16} />
+                <span className="info-label">요청자</span>
+              </div>
+              <div className="info-value">
+                <CategoryBadge $category={request.requester_name}>
+                  {categoryLabels[request.requester_name] || request.requester_name}
+                </CategoryBadge>
+              </div>
+            </InfoCard>
+            <InfoCard>
+              <div className="info-header">
                 <AlertTriangle className="info-icon" size={16} />
                 <span className="info-label">긴급도</span>
               </div>
@@ -537,17 +548,6 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
               </div>
             </InfoCard>
 
-            <InfoCard>
-              <div className="info-header">
-                <Package className="info-icon" size={16} />
-                <span className="info-label">카테고리</span>
-              </div>
-              <div className="info-value">
-                <CategoryBadge $category={request.category}>
-                  {categoryLabels[request.category] || request.category}
-                </CategoryBadge>
-              </div>
-            </InfoCard>
             
 
             {request.preferred_supplier && (
@@ -577,7 +577,8 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
           <JustificationSection>
             <div className="justification-header">
               <AlertTriangle className="justification-icon" size={20} />
-              <h3>구매 사유</h3>
+              <h3>              구매 사유 및 링크 <span style={{ color: 'red' }}>*</span>
+</h3>
             </div>
             <div className="justification-content">
               {request.justification}

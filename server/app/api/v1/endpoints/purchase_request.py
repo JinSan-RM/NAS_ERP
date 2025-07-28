@@ -600,7 +600,7 @@ async def update_purchase_request(
             # 현재 시간으로 승인일 설정
             purchase_request.approved_date = datetime.now()
             if not purchase_request.approved_by:
-                purchase_request.approved_by = "현재사용자"
+                purchase_request.approved_by = purchase_request.request_name
             
             print("✅ 완료 처리 데이터 설정됨")
         

@@ -159,7 +159,8 @@ const ApprovalModal: React.FC<ApprovalModalProps> = ({
 
         {request.justification && (
           <div>
-            <h4>구매 사유</h4>
+            <h4>              구매 사유 및 링크 <span style={{ color: 'red' }}>*</span>
+</h4>
             <p style={{ padding: '12px', background: '#f8fafc', borderRadius: '8px' }}>
               {request.justification}
             </p>
