@@ -665,31 +665,20 @@ def delete_purchase_request(
     return {"message": "구매 요청이 삭제되었습니다."}
 
 
+# server/app/api/v1/endpoints/purchase_request.py - project 필드 제거 버전
+
 @router.post("/bulk-upload", response_model=dict)
 def bulk_upload_purchase_requests(
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
-    """Excel 파일로 구매 요청 일괄 업로드 - 개선된 버전"""
+    """Excel 파일로 구매 요청 일괄 업로드 - 실제 DB 스키마에 맞춘 버전"""
     try:
-        print(f"📁 구매요청 Excel 업로드 시작: {file.filename}, 크기: {file.size}")
+        print(f"📁 구매요청 Excel 업로드 시작: {file.filename}")
         
-        # 파일 검증 강화
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="파일명이 없습니다.")
-        
-        if not file.filename.lower().endswith(('.xlsx', '.xls')):
-            raise HTTPException(
-                status_code=400,
-                detail="Excel 파일만 업로드 가능합니다 (.xlsx, .xls)"
-            )
-        
-        max_size = 10 * 1024 * 1024
-        if file.size and file.size > max_size:
-            raise HTTPException(
-                status_code=400,
-                detail="파일 크기는 10MB를 초과할 수 없습니다"
-            )
+        # 파일 검증
+        if not file.filename or not file.filename.lower().endswith(('.xlsx', '.xls')):
+            raise HTTPException(status_code=400, detail="Excel 파일만 업로드 가능합니다")
         
         # 파일 읽기
         content = file.file.read()
@@ -697,7 +686,7 @@ def bulk_upload_purchase_requests(
             raise HTTPException(status_code=400, detail="빈 파일입니다.")
         
         df = pd.read_excel(BytesIO(content), engine='openpyxl')
-        print(f"📋 Excel 데이터 로드 완료: {len(df)} 행")
+        print(f"📋 Excel 데이터 로드: {len(df)} 행, 컬럼: {list(df.columns)}")
         
         # 필수 컬럼 검증
         required_columns = ['품목명', '수량', '요청자명', '부서', '구매사유']
@@ -709,12 +698,6 @@ def bulk_upload_purchase_requests(
                 detail=f"필수 컬럼이 없습니다: {', '.join(missing_columns)}"
             )
         
-        if len(df) > 1000:
-            raise HTTPException(
-                status_code=400,
-                detail=f"최대 1000개 행까지만 처리할 수 있습니다. 현재: {len(df)}개"
-            )
-        
         # 데이터 처리
         created_requests = []
         errors = []
@@ -723,41 +706,18 @@ def bulk_upload_purchase_requests(
             try:
                 row_num = index + 2
                 
-                # 필수 필드 검증
+                # 🔥 실제 테이블 컬럼에 맞는 필드만 사용
                 item_name = str(row['품목명']).strip() if pd.notna(row['품목명']) else ''
                 requester_name = str(row['요청자명']).strip() if pd.notna(row['요청자명']) else ''
                 department = str(row['부서']).strip() if pd.notna(row['부서']) else ''
                 justification = str(row['구매사유']).strip() if pd.notna(row['구매사유']) else ''
                 
-                if not item_name:
+                # 필수 필드 검증
+                if not all([item_name, requester_name, department, justification]):
                     errors.append({
                         "row": row_num,
-                        "field": "품목명",
-                        "message": "품목명은 필수입니다"
-                    })
-                    continue
-                    
-                if not requester_name:
-                    errors.append({
-                        "row": row_num,
-                        "field": "요청자명",
-                        "message": "요청자명은 필수입니다"
-                    })
-                    continue
-                
-                if not department:
-                    errors.append({
-                        "row": row_num,
-                        "field": "부서",
-                        "message": "부서는 필수입니다"
-                    })
-                    continue
-                
-                if not justification:
-                    errors.append({
-                        "row": row_num,
-                        "field": "구매사유",
-                        "message": "구매사유는 필수입니다"
+                        "field": "필수필드",
+                        "message": "품목명, 요청자명, 부서, 구매사유는 필수입니다"
                     })
                     continue
                 
@@ -767,53 +727,77 @@ def bulk_upload_purchase_requests(
                     if quantity <= 0:
                         quantity = 1
                 except (ValueError, TypeError):
-                    errors.append({
-                        "row": row_num,
-                        "field": "수량",
-                        "message": "수량은 1 이상의 숫자여야 합니다"
-                    })
-                    continue
+                    quantity = 1
                 
-                # 예상단가 검증
+                # 선택적 필드들 (실제 존재하는 컬럼만)
+                specifications = str(row.get('사양', '')).strip() if pd.notna(row.get('사양')) else None
+                unit = str(row.get('단위', '개')).strip() if pd.notna(row.get('단위')) else '개'
+                currency = str(row.get('통화', 'KRW')).strip() if pd.notna(row.get('통화')) else 'KRW'
+                
+                # 예상단가
                 try:
-                    estimated_unit_price = float(row['예상단가']) if pd.notna(row['예상단가']) and row['예상단가'] != '' else None
+                    estimated_unit_price = float(row['예상단가']) if pd.notna(row.get('예상단가')) and row.get('예상단가') != '' else None
                 except (ValueError, TypeError):
                     estimated_unit_price = None
                 
-                from datetime import datetime as dt  # 명확한 import
+                # 카테고리 매핑
+                category = str(row.get('카테고리', 'OFFICE_SUPPLIES')).strip() if pd.notna(row.get('카테고리')) else 'OFFICE_SUPPLIES'
+                category_mapping = {
+                    'IT장비': 'ELECTRONICS',
+                    '사무용품': 'OFFICE_SUPPLIES', 
+                    '소모품': 'OFFICE_SUPPLIES',
+                    'AV장비': 'ELECTRONICS',
+                    '사무기기': 'OFFICE_SUPPLIES',
+                    '전자제품': 'ELECTRONICS',
+                    '가구': 'FURNITURE',
+                    '소프트웨어': 'SOFTWARE',
+                    '유지보수': 'MAINTENANCE',
+                    '서비스': 'SERVICES',
+                    '기타': 'OTHER'
+                }
+                category = category_mapping.get(category, 'OTHER')
+                
+                # 긴급도 매핑
+                urgency = str(row.get('긴급도', 'NORMAL')).strip().lower() if pd.notna(row.get('긴급도')) else 'normal'
+                urgency_mapping = {
+                    '낮음': 'LOW', '보통': 'NORMAL', '높음': 'HIGH', '긴급': 'URGENT', '응급': 'EMERGENCY',
+                    'low': 'LOW', 'normal': 'NORMAL', 'high': 'HIGH', 'urgent': 'URGENT', 'emergency': 'EMERGENCY'
+                }
+                urgency = urgency_mapping.get(urgency, 'NORMAL')
+                
+                # 요청 번호 생성
+                from datetime import datetime as dt
                 now = dt.now()
-                # 구매요청 데이터 구성
                 request_number = f"PR{now.strftime('%Y%m%d')}{now.microsecond//1000:03d}"
                 
-                # 🔥 변경점: DB 객체 직접 생성 (CRUD 대신)
+                # 🔥 실제 DB 스키마에 맞는 객체 생성 (존재하는 컬럼만)
                 new_request = DBPurchaseRequest(
                     request_number=request_number,
                     item_name=item_name,
-                    specifications=str(row.get('사양', '')).strip() if pd.notna(row.get('사양')) else None,
+                    specifications=specifications,
                     quantity=quantity,
-                    unit=str(row.get('단위', '개')).strip() if pd.notna(row.get('단위')) else '개',
+                    unit=unit,
                     estimated_unit_price=estimated_unit_price,
                     total_budget=estimated_unit_price * quantity if estimated_unit_price else None,
-                    currency=str(row.get('통화', 'KRW')).strip() if pd.notna(row.get('통화')) else 'KRW',
-                    category='OFFICE_SUPPLIES',
-                    urgency=str(row.get('긴급도', 'NORMAL')).strip().upper() if pd.notna(row.get('긴급도')) else 'NORMAL',
-                    purchase_method=str(row.get('구매방법', 'DIRECT')).strip() if pd.notna(row.get('구매방법')) else 'DIRECT',
+                    currency=currency,
+                    category=category,
+                    urgency=urgency,
+                    purchase_method='DIRECT',
                     requester_name=requester_name,
+                    requester_email=f"{requester_name.replace(' ', '').lower()}@company.com",
                     department=department,
+                    # position=None,  # 테이블에 없으면 제거
+                    # project=project,  # 🔥 이 필드 제거!
                     justification=justification,
                     status='SUBMITTED',
                     request_date=now,
                     is_active=True
                 )
                 
-                # 긴급도 검증 및 정규화
-                valid_urgencies = ['LOW', 'NORMAL', 'HIGH', 'URGENT']
-                if new_request.urgency not in valid_urgencies:
-                    new_request.urgency = 'NORMAL'
+                print(f"✅ 구매요청 객체 생성: {new_request.item_name}")
                 
-                # 🔥 변경점: DB에 직접 추가
                 db.add(new_request)
-                db.flush()  # ID를 얻기 위해 flush
+                db.flush()
                 
                 created_requests.append(new_request.request_number)
                 print(f"✅ 구매요청 생성 성공: {new_request.request_number}")
@@ -826,7 +810,7 @@ def bulk_upload_purchase_requests(
                     "message": str(item_error)
                 })
         
-        # 🔥 모든 처리가 완료된 후 한 번에 commit
+        # 커밋
         try:
             db.commit()
             print(f"💾 {len(created_requests)}개 구매요청 커밋 완료")
@@ -855,6 +839,7 @@ def bulk_upload_purchase_requests(
         import traceback
         print(f"📋 스택 트레이스: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"파일 처리 중 오류: {str(e)}")
+    
     
 @router.get("/export/excel")
 def export_purchase_requests_excel(
