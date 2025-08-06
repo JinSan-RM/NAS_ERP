@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // API 기본 설정
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = 'http://211.44.183.165:8000/api/v1';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -637,39 +637,43 @@ export const purchaseApi = {
 
 // Unified Inventory API - 새로운 통합 재고 관리
 export const inventoryApi = {
-  // // 품목 목록 조회
-  // getItems: async (page = 1, limit = 20, filters: SearchFilters = {}): Promise<{
-  //   data: {
-  //     items: UnifiedInventoryItem[];
-  //     total: number;
-  //     pages: number;
-  //     page: number;
-  //     size: number;
-  //   };
-  // }> => {
+
+  // getItems: async (page = 1, limit = 20, filters: any = {}): Promise<any> => {
   //   try {
   //     const params = {
   //       skip: (page - 1) * limit,
   //       limit,
-  //       ...Object.fromEntries(
-  //         Object.entries(filters).filter(([_, value]) => value !== undefined && value !== '')
-  //       )
+  //       ...filters
   //     };
-      
-  //     const response = await apiRequest.get('/inventory', params); // unified_inventory 엔드포인트
+  //     const response = await apiRequest.get('/inventory/', params);
   //     return { data: response };
   //   } catch (error) {
-  //     console.error('품목 조회 실패:', error);
+  //     console.error('재고 조회 실패:', error);
   //     throw error;
   //   }
   // },
-  getItems: async (page = 1, limit = 20, filters: any = {}): Promise<any> => {
+
+  getItems: async (
+    page = 1, 
+    limit = 20, 
+    filters: any = {}, 
+    sortOptions?: {  // 🔥 새로 추가
+      sort_by?: string;
+      sort_order?: 'asc' | 'desc';
+    }
+  ): Promise<any> => {
     try {
       const params = {
         skip: (page - 1) * limit,
         limit,
-        ...filters
+        ...filters,
+        // 🔥 정렬 파라미터 추가
+        sort_by: sortOptions?.sort_by || 'item_code',
+        sort_order: sortOptions?.sort_order || 'desc'
       };
+      
+      console.log('📋 API 요청 파라미터:', params);
+      
       const response = await apiRequest.get('/inventory/', params);
       return { data: response };
     } catch (error) {
@@ -677,7 +681,6 @@ export const inventoryApi = {
       throw error;
     }
   },
-
   // 🔥 stats API 경로 수정
   getStats: async (): Promise<any> => {
     try {

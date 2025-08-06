@@ -10,7 +10,7 @@ import stat  # 추가: 권한 체크용
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, or_, and_, extract, text, case
+from sqlalchemy import func, or_, and_, extract, text, case, desc, asc
 from app.crud.base import CRUDBase
 from app.models.unified_inventory import UnifiedInventory, InventoryImage
 from app.schemas.unified_inventory import (
@@ -37,7 +37,8 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
         *,
         skip: int = 0,
         limit: int = 100,
-        filters: Optional[UnifiedInventoryFilter] = None
+        filters: Optional[UnifiedInventoryFilter] = None,
+        sort_options: Optional[Dict[str, str]] = None
     ) -> List[UnifiedInventory]:
         """필터링된 재고 목록 조회"""
         query = db.query(UnifiedInventory).filter(UnifiedInventory.is_active == True)
@@ -133,7 +134,58 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
                     query = query.filter(UnifiedInventory.tags.contains([tag]))
         
         # 정렬: 품목명 오름차순
-        query = query.order_by(UnifiedInventory.item_name)
+        if sort_options:
+            sort_by = sort_options.get('sort_by', 'item_code')
+            sort_order = sort_options.get('sort_order', 'desc')
+            
+            print(f"📊 정렬 적용: {sort_by} {sort_order}")
+            
+            if sort_by == 'item_code':
+                try:
+                    # PostgreSQL: 정규식으로 마지막 숫자 4자리 추출
+                    if sort_order == 'desc':
+                        query = query.order_by(
+                            desc(text("CAST(SUBSTRING(item_code, '\\d{4}$') AS INTEGER)"))
+                        )
+                    else:
+                        query = query.order_by(
+                            asc(text("CAST(SUBSTRING(item_code, '\\d{4}$') AS INTEGER)"))
+                        )
+                except Exception as e:
+                    print(f"⚠️ 정규식 정렬 실패, 기본 정렬 사용: {e}")
+                    # 정규식 실패 시 단순 문자열 정렬
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(UnifiedInventory.item_code))
+                    else:
+                        query = query.order_by(asc(UnifiedInventory.item_code))
+            else:
+                # 다른 컬럼들은 일반 정렬 (기존과 동일)
+                sort_column_map = {
+                    'item_name': UnifiedInventory.item_name,
+                    'created_at': UnifiedInventory.created_at,
+                    'current_quantity': UnifiedInventory.current_quantity,
+                    'last_received_date': UnifiedInventory.last_received_date,
+                }
+                
+                if sort_by in sort_column_map:
+                    column = sort_column_map[sort_by]
+                    if sort_order == 'desc':
+                        query = query.order_by(desc(column))
+                    else:
+                        query = query.order_by(asc(column))
+                else:
+                    # 기본 정렬로 fallback
+                    query = query.order_by(desc(UnifiedInventory.created_at))
+        else:
+            # 🔥 기본 정렬
+            try:
+                # 정규식으로 마지막 4자리 숫자 추출하여 내림차순
+                query = query.order_by(
+                    desc(text("CAST(SUBSTRING(item_code, '\\d{4}$') AS INTEGER)"))
+                )
+            except:
+                # 실패 시 생성일 기준 내림차순
+                query = query.order_by(desc(UnifiedInventory.created_at))
         
         return query.offset(skip).limit(limit).all()
     

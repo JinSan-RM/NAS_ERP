@@ -401,6 +401,8 @@ const InventoryPage: React.FC = () => {
   const [selectedImageName, setSelectedImageName] = useState<string>('');
   const [imageZoom, setImageZoom] = useState(1);
   const [isExcelUploadModalOpen, setIsExcelUploadModalOpen] = useState(false);
+  const [sortBy, setSortBy] = useState('created_at'); // 생성일 기준
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); // 최신순
 
   // 재고 목록 조회
   const { 
@@ -410,11 +412,15 @@ const InventoryPage: React.FC = () => {
     refetch 
   } = useQuery({
     queryKey: ['unified-inventory', currentPage, filters],
-    queryFn: () => api.inventory.getItems(currentPage, 20, filters),
+    queryFn: () => api.inventory.getItems(currentPage, 20, filters, {
+      sort_by: 'item_code',  // 품목코드 기준
+      sort_order: 'desc'     // 내림차순
+    }),
     keepPreviousData: true,
     staleTime: 5 * 60 * 1000,
     retry: 3,
   });
+
 
   // 재고 통계 조회
   const { data: statsData } = useQuery({
@@ -448,7 +454,7 @@ const InventoryPage: React.FC = () => {
       });
       
       // API 호출
-      const response = await fetch(`http://localhost:8000/api/v1/inventory/${itemId}/complete-receipt-with-images`, {
+      const response = await fetch(`http://211.44.183.165:8000/api/v1/inventory/${itemId}/complete-receipt-with-images`, {
         method: 'POST',
         body: formData
       });
@@ -607,15 +613,22 @@ const InventoryPage: React.FC = () => {
     }
   };
   const getFullImageUrl = (imageUrl) => {
+    console.log('🔍 getFullImageUrl 입력:', JSON.stringify(imageUrl));
+    
     if (!imageUrl) return null;
     
     // 이미 전체 URL인 경우
     if (imageUrl.startsWith('http')) {
+      console.log('🔍 이미 완전한 URL:', imageUrl);
       return imageUrl;
     }
     
-    // 상대 경로인 경우 전체 URL로 변환
-    return `http://localhost:8000${imageUrl}`;
+    // URL 정리 - 불필요한 슬래시 제거
+    const cleanUrl = imageUrl.replace(/^\/+/, ''); // 앞의 모든 슬래시 제거
+    const fullUrl = `http://211.44.183.165:8000/${cleanUrl}`;
+    
+    console.log('🔍 생성된 URL:', fullUrl);
+    return fullUrl;
   };
   const handleImageClick = (imageUrl: string, itemName: string, imageIndex: number) => {
     setSelectedImageUrl(getFullImageUrl(imageUrl));
@@ -669,6 +682,36 @@ const InventoryPage: React.FC = () => {
     setImageZoom(1);
   };
 
+  const sortedItems = useMemo(() => {
+    if (!inventoryData?.data?.items) return [];
+    
+    const items = [...inventoryData.data.items];
+    
+    return items.sort((a, b) => {
+      // 품목코드에서 마지막 4자리 숫자만 추출
+      const getLastFourDigits = (code: string) => {
+        const match = code.match(/-(\d{4})$/);
+        return match ? parseInt(match[1], 10) : 0;
+      };
+      
+      const aNum = getLastFourDigits(a.item_code);
+      const bNum = getLastFourDigits(b.item_code);
+      
+      // 내림차순 정렬 (큰 숫자가 먼저)
+      return bNum - aNum;
+    });
+  }, [inventoryData?.data?.items]);
+
+  const handleSort = (column: string) => {
+    if (sortBy === column) {
+      // 같은 컬럼 클릭시 정렬 순서 변경
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      // 다른 컬럼 클릭시 해당 컬럼으로 정렬
+      setSortBy(column);
+      setSortOrder('desc'); // 기본적으로 내림차순
+    }
+  };
   // ESC 키로 모달 닫기
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -683,6 +726,7 @@ const InventoryPage: React.FC = () => {
     }
   }, [selectedImageUrl]);
 
+
   // 🔥 수정: 테이블 컬럼 정의 - 상태 표시 로직 변경
   const columns: TableColumn<InventoryItem>[] = useMemo(() => [
     {
@@ -691,9 +735,19 @@ const InventoryPage: React.FC = () => {
       sortable: true,
       width: '160px',
       style: { verticalAlign: 'middle' },
+      // render: (value) => (
+      //   <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: '500' }}>
+      //     {value}
+      //   </span>
       render: (value) => (
         <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', fontWeight: '500' }}>
           {value}
+          {/* 정렬 표시 아이콘 */}
+          {sortBy === 'item_code' && (
+            <span style={{ marginLeft: '4px', fontSize: '0.8rem' }}>
+              {sortOrder === 'desc' ? '↓' : '↑'}
+            </span>
+          )}
         </span>
       ),
     },
@@ -1055,6 +1109,7 @@ const InventoryPage: React.FC = () => {
         {/* 테이블 */}
         <Table
           columns={columns}
+          // data={sortedItems}
           data={items}
           loading={isLoading}
           emptyMessage="등록된 품목이 없습니다."

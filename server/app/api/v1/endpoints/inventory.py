@@ -173,6 +173,8 @@ def read_inventories(
     min_quantity: Optional[int] = Query(None),
     max_quantity: Optional[int] = Query(None),
     has_images: Optional[bool] = Query(None),
+    sort_by: Optional[str] = Query(default="item_code", description="정렬 기준 (item_code, item_name, created_at, current_quantity)"),
+    sort_order: Optional[str] = Query(default="desc", description="정렬 순서 (asc, desc)"),
 ):
     """통합 재고 목록 조회 - 날짜 형식 완전 수정"""
     
@@ -196,9 +198,13 @@ def read_inventories(
             max_quantity=max_quantity,
             has_images=has_images
         )
+        sort_options = {
+            'sort_by': sort_by,
+            'sort_order': sort_order
+        }
         
         items = crud.inventory.get_multi_with_filter(
-            db=db, skip=skip, limit=limit, filters=filters
+            db=db, skip=skip, limit=limit, filters=filters, sort_options=sort_options
         )
         total = crud.inventory.count_with_filter(db=db, filters=filters)
         
@@ -534,7 +540,7 @@ async def complete_receipt_with_images(
                     saved_files.append(file_path)
                     
                     # 상대 경로로 URL 생성
-                    image_url = f"http://localhost:8000/uploads/inventory_images/{unique_filename}"
+                    image_url = f"http://211.44.183.165:8000/uploads/inventory_images/{unique_filename}"
                     image_urls.append(image_url)
                     print(f"🔗 이미지 URL 생성: {image_url}")
                     
