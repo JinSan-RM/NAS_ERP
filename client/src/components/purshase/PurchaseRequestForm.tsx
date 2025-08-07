@@ -464,10 +464,10 @@ const PurchaseRequestForm: React.FC<PurchaseRequestFormProps> = ({
             />
             
             <Input
-              label="선호 공급업체"
+              label="구매처"
               value={formData.preferredSupplier}
               onChange={(e) => handleChange('preferredSupplier', e.target.value)}
-              placeholder="선호하는 공급업체가 있다면 입력하세요"
+              placeholder="구매처를 입력하세요"
             />
             
             <Select

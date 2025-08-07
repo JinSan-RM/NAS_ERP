@@ -547,6 +547,13 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
                 </UrgencyBadge>
               </div>
             </InfoCard>
+            <InfoCard>
+              <div className="info-header">
+                <Building className="info-icon" size={16} />
+                <span className="info-label">구매처</span>
+              </div>
+              <div className="info-value">{request.preferred_supplier || '정보없음'}</div>
+            </InfoCard>
 
             
 
@@ -554,7 +561,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
               <InfoCard>
                 <div className="info-header">
                   <Building className="info-icon" size={16} />
-                  <span className="info-label">선호 공급업체</span>
+                  <span className="info-label">구매처</span>
                 </div>
                 <div className="info-value">{request.preferred_supplier}</div>
               </InfoCard>
