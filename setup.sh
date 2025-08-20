@@ -82,8 +82,8 @@ SECRET_KEY=$(openssl rand -hex 32)
 ACCESS_TOKEN_EXPIRE_MINUTES=30
 
 # CORS 설정 - NAS IP로 변경하세요
-ALLOWED_HOSTS=["http://localhost", "http://localhost:80", "http://YOUR_NAS_IP"]
-TRUSTED_HOSTS=["localhost", "YOUR_NAS_IP"]
+ALLOWED_HOSTS=["http://localhost", "http://localhost:80", "http://http://211.44.183.165/"]
+TRUSTED_HOSTS=["localhost", "http://211.44.183.165/"]
 
 # 파일 업로드 설정
 UPLOAD_DIR=/app/uploads
@@ -103,7 +103,7 @@ EOF
     if [ ! -f "client/.env" ]; then
         cat > client/.env << EOF
 # API URL - NAS IP로 변경하세요
-VITE_API_URL=http://YOUR_NAS_IP:8000/api/v1
+VITE_API_URL=http://http://211.44.183.165:8000/api/v1
 VITE_APP_TITLE=Inventory Management System
 VITE_APP_VERSION=1.0.0
 
@@ -197,9 +197,9 @@ start_services() {
         log_success "🎉 설정 완료!"
         log_info ""
         log_info "접속 정보:"
-        log_info "- 메인 애플리케이션: http://YOUR_NAS_IP"
-        log_info "- API 문서: http://YOUR_NAS_IP:8000/docs"
-        log_info "- pgAdmin (관리도구): http://YOUR_NAS_IP:5050"
+        log_info "- 메인 애플리케이션: http://http://211.44.183.165/"
+        log_info "- API 문서: http://http://211.44.183.165:8000/docs"
+        log_info "- pgAdmin (관리도구): http://http://211.44.183.165:5050"
         log_info ""
         log_info "유용한 명령어:"
         log_info "- 로그 확인: docker-compose logs -f"
