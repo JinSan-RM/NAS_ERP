@@ -641,28 +641,149 @@ async def update_purchase_request(
             detail=f"데이터베이스 업데이트 실패: {str(e)}"
         )
 
-@router.delete("/{request_id}")
+@router.delete("/{request_id}", response_model=dict)
 def delete_purchase_request(
     *,
     db: Session = Depends(get_db),
     request_id: int
 ):
     """
-    구매 요청 삭제 (소프트 삭제)
+    구매 요청 삭제 - 디버깅 버전
     """
-    purchase_request = crud.purchase_request.get(db=db, id=request_id)
-    if not purchase_request:
-        raise HTTPException(status_code=404, detail="구매 요청을 찾을 수 없습니다.")
+    print(f"\n🔥 ===== 삭제 요청 시작 =====")
+    print(f"📥 요청 ID: {request_id}")
+    print(f"📥 요청 타입: {type(request_id)}")
     
-    # 상태에 따른 삭제 권한 확인
-    if purchase_request.status in [RequestStatus.APPROVED]:
-        raise HTTPException(
-            status_code=400,
-            detail="승인된 요청은 삭제할 수 없습니다."
+    try:
+        # 1. 요청 존재 확인
+        print(f"🔍 1단계: 요청 존재 확인...")
+        
+        request_query = db.query(DBPurchaseRequest).filter(
+            DBPurchaseRequest.id == request_id
         )
-    
-    crud.purchase_request.soft_delete(db=db, id=request_id)
-    return {"message": "구매 요청이 삭제되었습니다."}
+        
+        print(f"📋 실행할 쿼리: {request_query}")
+        
+        existing_request = request_query.first()
+        
+        if not existing_request:
+            print(f"❌ 요청을 찾을 수 없음: ID={request_id}")
+            
+            # 🔥 전체 요청 목록 확인 (디버깅용)
+            all_requests = db.query(DBPurchaseRequest.id, DBPurchaseRequest.item_name).limit(10).all()
+            print(f"📋 현재 존재하는 요청들: {[(r.id, r.item_name) for r in all_requests]}")
+            
+            raise HTTPException(
+                status_code=404, 
+                detail=f"구매 요청 {request_id}를 찾을 수 없습니다."
+            )
+        
+        print(f"✅ 요청 발견: {existing_request.item_name} (상태: {existing_request.status})")
+        
+        # 2. 삭제 권한 확인 (선택사항)
+        print(f"🔍 2단계: 삭제 권한 확인...")
+        
+        if existing_request.status == 'COMPLETED':
+            print(f"⚠️ 완료된 요청은 삭제 제한")
+            # 완료된 요청도 삭제 허용하되 경고만 출력
+            print(f"⚠️ 완료된 요청이지만 삭제 진행...")
+        
+        # 3. 삭제 실행
+        print(f"🗑️ 3단계: 삭제 실행...")
+        
+        # 🔥 방법 1: ORM 삭제
+        try:
+            print(f"🔥 ORM 방식으로 삭제 시도...")
+            
+            db.delete(existing_request)
+            db.commit()
+            
+            print(f"✅ ORM 삭제 성공")
+            
+            return {
+                "success": True,
+                "message": f"구매 요청 #{request_id}가 성공적으로 삭제되었습니다.",
+                "deleted_id": request_id,
+                "deleted_item": existing_request.item_name,
+                "method": "orm_delete"
+            }
+            
+        except Exception as orm_error:
+            print(f"❌ ORM 삭제 실패: {orm_error}")
+            db.rollback()
+            
+            # 🔥 방법 2: 원시 SQL 삭제
+            print(f"🔄 원시 SQL 방식으로 재시도...")
+            
+            try:
+                delete_sql = text("DELETE FROM purchase_requests WHERE id = :id")
+                result = db.execute(delete_sql, {"id": request_id})
+                
+                if result.rowcount > 0:
+                    db.commit()
+                    print(f"✅ 원시 SQL 삭제 성공")
+                    
+                    return {
+                        "success": True,
+                        "message": f"구매 요청 #{request_id}가 삭제되었습니다.",
+                        "deleted_id": request_id,
+                        "deleted_item": existing_request.item_name,
+                        "method": "raw_sql_delete"
+                    }
+                else:
+                    print(f"❌ 삭제된 행이 없음")
+                    raise Exception("삭제된 행이 없습니다.")
+                    
+            except Exception as sql_error:
+                print(f"❌ 원시 SQL 삭제도 실패: {sql_error}")
+                db.rollback()
+                
+                # 🔥 방법 3: 소프트 삭제
+                print(f"🔄 소프트 삭제로 전환...")
+                
+                try:
+                    # is_active 컬럼이 있는지 확인
+                    if hasattr(existing_request, 'is_active'):
+                        existing_request.is_active = False
+                    
+                    existing_request.status = 'CANCELLED'
+                    
+                    if hasattr(existing_request, 'updated_at'):
+                        existing_request.updated_at = datetime.now()
+                    
+                    db.commit()
+                    
+                    print(f"✅ 소프트 삭제 성공")
+                    
+                    return {
+                        "success": True,
+                        "message": f"구매 요청 #{request_id}가 취소되었습니다.",
+                        "deleted_id": request_id,
+                        "deleted_item": existing_request.item_name,
+                        "method": "soft_delete"
+                    }
+                    
+                except Exception as soft_error:
+                    print(f"❌ 소프트 삭제도 실패: {soft_error}")
+                    db.rollback()
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"모든 삭제 방법이 실패했습니다: ORM({orm_error}), SQL({sql_error}), Soft({soft_error})"
+                    )
+                    
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        print(f"❌ 예상치 못한 삭제 오류: {e}")
+        import traceback
+        print(f"📋 스택 트레이스:\n{traceback.format_exc()}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"삭제 중 오류가 발생했습니다: {str(e)}"
+        )
+    finally:
+        print(f"🔥 ===== 삭제 요청 종료 =====\n")
 
 
 # server/app/api/v1/endpoints/purchase_request.py - project 필드 제거 버전

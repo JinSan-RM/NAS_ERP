@@ -681,17 +681,98 @@ const PurchaseRequestPage: React.FC = () => {
   });
 
   // 삭제 Mutation
-  const deleteMutation = useMutation({
-    mutationFn: purchaseApi.deleteRequest,
-    onSuccess: () => {
+const deleteMutation = useMutation({
+  mutationFn: async (requestId: number) => {
+    console.log(`🔥 삭제 API 호출 시작: ID=${requestId}`);
+    
+    try {
+      // 🔥 purchaseApi.deleteRequest 사용
+      const response = await purchaseApi.deleteRequest(requestId);
+      console.log('✅ 삭제 API 성공:', response);
+      return response;
+    } catch (error: any) {
+      console.error('❌ 삭제 API 실패:', error);
+      console.error('❌ 에러 상세:', {
+        status: error.response?.status,
+        data: error.response?.data,
+        message: error.message
+      });
+      throw error;
+    }
+  },
+  
+  onSuccess: (data, requestId) => {
+    console.log('🎉 삭제 성공 처리:', data);
+    
+    // 성공 메시지
+    const itemName = data.deleted_item || '구매 요청';
+    const method = data.method === 'soft_delete' ? '취소' : '삭제';
+    
+    toast.success(`${itemName}이(가) 성공적으로 ${method}되었습니다.`, {
+      autoClose: 3000
+    });
+    
+    // 🔥 캐시에서 해당 항목 제거 (즉시 UI 업데이트)
+    queryClient.setQueryData(['purchase-requests', currentPage, filters], (oldData: any) => {
+      if (!oldData?.data?.items) return oldData;
+      
+      const newItems = oldData.data.items.filter((item: any) => item.id !== requestId);
+      
+      console.log(`📋 캐시 업데이트: ${oldData.data.items.length} → ${newItems.length}`);
+      
+      return {
+        ...oldData,
+        data: {
+          ...oldData.data,
+          items: newItems,
+          total: Math.max(0, oldData.data.total - 1)
+        }
+      };
+    });
+    
+    // 🔥 통계 캐시도 업데이트
+    queryClient.setQueryData(['purchase-requests-stats'], (oldStats: any) => {
+      if (!oldStats?.data) return oldStats;
+      
+      return {
+        ...oldStats,
+        data: {
+          ...oldStats.data,
+          total: Math.max(0, oldStats.data.total - 1)
+        }
+      };
+    });
+    
+    // 🔥 1초 후 새로고침 (확실한 동기화)
+    setTimeout(() => {
+      console.log('🔄 캐시 새로고침 실행');
       queryClient.invalidateQueries({ queryKey: ['purchase-requests'] });
       queryClient.invalidateQueries({ queryKey: ['purchase-requests-stats'] });
-      toast.success('구매 요청이 삭제되었습니다.');
-    },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || '삭제 중 오류가 발생했습니다.');
-    },
-  });
+    }, 1000);
+  },
+  
+  onError: (error: any, requestId) => {
+    console.error('❌ 삭제 실패 처리:', error);
+    
+    // 구체적인 에러 메시지
+    let errorMessage = '삭제 중 오류가 발생했습니다.';
+    
+    if (error.response?.status === 404) {
+      errorMessage = '삭제할 구매 요청을 찾을 수 없습니다.';
+    } else if (error.response?.status === 400) {
+      errorMessage = error.response.data?.detail || '삭제할 수 없는 상태입니다.';
+    } else if (error.response?.status === 500) {
+      errorMessage = '서버 오류로 삭제에 실패했습니다. 잠시 후 다시 시도해주세요.';
+    } else if (error.response?.data?.detail) {
+      errorMessage = error.response.data.detail;
+    }
+    
+    toast.error(errorMessage, {
+      autoClose: 5000
+    });
+  },
+});
+
 
   // Export Mutation
   const exportMutation = useMutation({
@@ -888,6 +969,8 @@ const PurchaseRequestPage: React.FC = () => {
               variant="danger"
               onClick={() => handleDelete(item.id)}
               title="삭제"
+              disabled={deleteMutation.isPending}
+              loading={deleteMutation.isPending}
             >
               <Trash2 size={14} />
             </Button>
@@ -909,11 +992,41 @@ const PurchaseRequestPage: React.FC = () => {
     setIsFormModalOpen(true);
   };
 
-  const handleDelete = async (requestId: number) => {
-    if (window.confirm('정말로 이 구매 요청을 삭제하시겠습니까?')) {
-      deleteMutation.mutate(requestId);
+const handleDelete = async (requestId: number) => {
+  try {
+    console.log(`🗑️ 구매 요청 삭제 시작: ID=${requestId}`);
+    
+    // 사용자 확인
+    const confirmMessage = `정말로 이 구매 요청을 삭제하시겠습니까?\n\nID: ${requestId}\n\n⚠️ 이 작업은 되돌릴 수 없습니다.`;
+    
+    if (!window.confirm(confirmMessage)) {
+      console.log('🚫 사용자가 삭제를 취소함');
+      return;
     }
-  };
+    
+    // 삭제 실행
+    console.log(`🗑️ 삭제 API 호출: ID=${requestId}`);
+    await deleteMutation.mutateAsync(requestId);
+    
+  } catch (error: any) {
+    console.error('❌ 삭제 처리 중 오류:', error);
+    
+    // 에러 메시지 처리
+    let errorMessage = '삭제 중 오류가 발생했습니다.';
+    
+    if (error.response?.status === 404) {
+      errorMessage = '삭제할 구매 요청을 찾을 수 없습니다.';
+    } else if (error.response?.status === 400) {
+      errorMessage = error.response.data?.detail || '삭제할 수 없는 상태입니다.';
+    } else if (error.response?.data?.detail) {
+      errorMessage = error.response.data.detail;
+    }
+    
+    toast.error(errorMessage, {
+      autoClose: 5000
+    });
+  }
+};
 
   const handleExport = () => {
     exportMutation.mutate();

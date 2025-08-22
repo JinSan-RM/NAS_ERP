@@ -2,6 +2,7 @@
 import axios from 'axios';
 
 // API 기본 설정
+// const API_BASE_URL = 'http://localhost:8000/api/v1';
 const API_BASE_URL = 'http://211.44.183.165:8000/api/v1';
 
 const api = axios.create({
@@ -367,12 +368,45 @@ export const purchaseApi = {
   },
 
   // 구매 요청 삭제
-  deleteRequest: async (id: number): Promise<{ message: string }> => {
+  deleteRequest: async (id: number): Promise<{ 
+    success: boolean; 
+    message: string; 
+    deleted_id: number;
+    deleted_item?: string;
+    method?: string;
+  }> => {
     try {
+      console.log(`🗑️ 구매 요청 삭제 API 호출: ID=${id}`);
+      console.log(`📍 요청 URL: ${API_BASE_URL}/purchase-requests/${id}`);
+      
       const response = await apiRequest.delete(`/purchase-requests/${id}`);
-      return response;
-    } catch (error) {
-      console.error('구매 요청 삭제 실패:', error);
+      
+      console.log('✅ 삭제 API 성공 응답:', response);
+      
+      // 🔥 응답 데이터 구조 확인 및 정규화
+      if (response.success !== undefined) {
+        // 백엔드가 올바른 응답을 반환한 경우
+        return response;
+      } else {
+        // 기본 응답인 경우
+        return {
+          success: true,
+          message: '구매 요청이 삭제되었습니다.',
+          deleted_id: id,
+          deleted_item: '구매 요청',
+          method: 'delete'
+        };
+      }
+    } catch (error: any) {
+      console.error('❌ 삭제 API 실패:', error);
+      console.error('❌ 에러 상세 정보:', {
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        url: error.config?.url,
+        method: error.config?.method
+      });
+      
       throw error;
     }
   },
