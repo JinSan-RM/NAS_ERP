@@ -1114,6 +1114,44 @@ class CRUDInventory(CRUDBase[UnifiedInventory, UnifiedInventoryCreate, UnifiedIn
             
         except Exception as e:
             raise Exception(f"템플릿 생성 중 오류: {str(e)}")
+        
+    def upload_transaction_document(
+        self, 
+        db: Session, 
+        *, 
+        item_id: int, 
+        file: UploadFile,
+        uploaded_by: str = "시스템"
+    ) -> Optional[UnifiedInventory]:
+        """거래명세서 업로드"""
+        inventory = self.get(db=db, id=item_id)
+        if not inventory:
+            return None
+        
+        # 파일 저장 로직 (기존 이미지 업로드와 동일)
+        upload_dir = os.path.join(os.getcwd(), "uploads", "transaction_documents")
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # 고유 파일명 생성
+        file_extension = os.path.splitext(file.filename)[1]
+        unique_filename = f"transaction_{item_id}_{uuid.uuid4()}{file_extension}"
+        file_path = os.path.join(upload_dir, unique_filename)
+        
+        # 파일 저장
+        with open(file_path, "wb") as buffer:
+            buffer.write(file.file.read())
+        
+        # URL 생성
+        file_url = f"http://211.44.183.165:8000/uploads/transaction_documents/{unique_filename}"
+        
+        # 🔥 새로운 컬럼들 업데이트
+        inventory.transaction_document_url = file_url
+        inventory.transaction_upload_date = datetime.now()
+        inventory.transaction_uploaded_by = uploaded_by
+        
+        db.commit()
+        db.refresh(inventory)
+        return inventory
     
 # 인스턴스 생성
 inventory = CRUDInventory(UnifiedInventory)

@@ -23,7 +23,7 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
-allowed_origins_str = os.getenv("ALLOWED_HOSTS", "http://localhost,http://localhost:80,http://localhost:3001")
+allowed_origins_str = os.getenv("ALLOWED_HOSTS", "http://localhost,http://localhost:80,http://localhost:3001,http://192.168.0.16")
 allowed_origins = [origin.strip() for origin in allowed_origins_str.split(",")]  # strip() 추가로 공백 제거
 print(f"✅ Loaded ALLOWED_ORIGINS: {allowed_origins}")  # 로그 추가 - 서버 시작 시 출력됨
 

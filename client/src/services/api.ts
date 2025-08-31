@@ -2,7 +2,7 @@
 import axios from 'axios';
 
 // API 기본 설정
-// const API_BASE_URL = 'http://localhost:8000/api/v1';
+// const API_BASE_URL = 'http://192.168.0.16:8000/api/v1';
 const API_BASE_URL = 'http://211.44.183.165:8000/api/v1';
 
 const api = axios.create({
@@ -1260,6 +1260,100 @@ uploadExcel: async (file: File): Promise<UploadResult> => {
       return updatedItem;
     } catch (error) {
       console.error('품목 업데이트 실패:', error);
+      throw error;
+    }
+  },
+  uploadTransactionDocument: async (itemId: number, file: File): Promise<{
+    success: boolean;
+    message: string;
+    document_url: string;
+    uploaded_by: string;
+    upload_date: string;
+  }> => {
+    try {
+      console.log(`거래명세서 업로드 시작: 품목 ID=${itemId}, 파일명=${file.name}`);
+      
+      // 파일 유효성 검사
+      if (!file) {
+        throw new Error('파일이 선택되지 않았습니다.');
+      }
+      
+      // 지원되는 파일 형식 확인
+      const allowedTypes = [
+        'application/pdf',
+        'image/jpeg',
+        'image/png', 
+        'image/jpg',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // xlsx
+        'application/vnd.ms-excel' // xls
+      ];
+      
+      if (!allowedTypes.includes(file.type)) {
+        throw new Error('PDF, 이미지 파일 또는 Excel 파일만 업로드 가능합니다.');
+      }
+      
+      // 파일 크기 검증 (10MB)
+      const maxSize = 10 * 1024 * 1024;
+      if (file.size > maxSize) {
+        throw new Error('파일 크기는 10MB를 초과할 수 없습니다.');
+      }
+      
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      const response = await api.post(`/inventory/${itemId}/transaction-document`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+        timeout: 180000, // 3분 타임아웃
+      });
+      
+      console.log('거래명세서 업로드 성공:', response.data);
+      
+      return {
+        success: response.data.success || true,
+        message: response.data.message || '거래명세서가 업로드되었습니다.',
+        document_url: response.data.document_url,
+        uploaded_by: response.data.uploaded_by,
+        upload_date: response.data.upload_date
+      };
+      
+    } catch (error: any) {
+      console.error('거래명세서 업로드 실패:', error);
+      
+      if (error.response?.data) {
+        throw new Error(error.response.data.detail || error.response.data.message || '업로드 중 오류가 발생했습니다.');
+      }
+      throw new Error(error.message || '업로드 중 알 수 없는 오류가 발생했습니다.');
+    }
+  },
+
+  // 거래명세서 상태 확인 함수
+  checkTransactionDocumentStatus: async (itemId: number): Promise<{
+    has_document: boolean;
+    document_url?: string;
+    upload_date?: string;
+    uploaded_by?: string;
+  }> => {
+    try {
+      const response = await apiRequest.get(`/inventory/${itemId}/transaction-document/status`);
+      return response;
+    } catch (error) {
+      console.error('거래명세서 상태 확인 실패:', error);
+      return { has_document: false };
+    }
+  },
+
+  // 거래명세서 삭제 함수
+  deleteTransactionDocument: async (itemId: number): Promise<{
+    success: boolean;
+    message: string;
+  }> => {
+    try {
+      const response = await apiRequest.delete(`/inventory/${itemId}/transaction-document`);
+      return response;
+    } catch (error) {
+      console.error('거래명세서 삭제 실패:', error);
       throw error;
     }
   },
