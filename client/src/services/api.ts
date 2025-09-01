@@ -244,6 +244,9 @@ export interface UnifiedInventoryItem {
   updated_at?: string;
   created_by?: string;
   updated_by?: string;
+  transaction_document_url?: string;
+  transaction_upload_date?: string;
+  transaction_uploaded_by?: string;
 }
 
 export interface ReceiptHistory {

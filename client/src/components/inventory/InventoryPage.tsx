@@ -16,12 +16,13 @@ import InventoryFilters from './InventoryFilters';
 import InventoryForm from './InventoryForm';
 import ReceiptModal from './ReceiptModal';
 
-import { inventoryApi } from '../../services/api';
 import InventoryExcelUpload from './InventoryExcelUpload';
 import TransactionDocumentModal from './TransactionDocumentModal';
 
 // Services
 import api from '../../services/api';
+import { inventoryApi } from '../../services/api';
+import { UnifiedInventoryItem as InventoryItem } from '../../services/api';
 
 // Types
 import { TableColumn, SearchFilters } from '../../types';
@@ -439,10 +440,10 @@ const InventoryPage: React.FC = () => {
   const [filters, setFilters] = useState<SearchFilters>({});
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
-  const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
+  const [editingItem, setEditingItem] = useState<UnifiedInventoryItem  | null>(null);
+  const [selectedItem, setSelectedItem] = useState<UnifiedInventoryItem  | null>(null);
   const [isReceiptWithImagesModalOpen, setIsReceiptWithImagesModalOpen] = useState(false);
-  const [selectedItemForReceipt, setSelectedItemForReceipt] = useState<InventoryItem | null>(null);
+  const [selectedItemForReceipt, setSelectedItemForReceipt] = useState<UnifiedInventoryItem  | null>(null);
   const [selectedImageUrl, setSelectedImageUrl] = useState<string | null>(null);
   const [selectedImageName, setSelectedImageName] = useState<string>('');
   const [imageZoom, setImageZoom] = useState(1);
@@ -450,7 +451,7 @@ const InventoryPage: React.FC = () => {
   const [sortBy, setSortBy] = useState('created_at'); // 생성일 기준
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc'); // 최신순
   const [isTransactionUploadModalOpen, setIsTransactionUploadModalOpen] = useState(false);
-  const [selectedItemForTransaction, setSelectedItemForTransaction] = useState<InventoryItem | null>(null);
+  const [selectedItemForTransaction, setSelectedItemForTransaction] = useState<UnifiedInventoryItem  | null>(null);
   const [selectedTransactionUrl, setSelectedTransactionUrl] = useState<string | null>(null);
   const [selectedTransactionName, setSelectedTransactionName] = useState<string>('');
 
@@ -828,7 +829,8 @@ const InventoryPage: React.FC = () => {
   };
 
   // 🔥 수정: 테이블 컬럼 정의 - 상태 표시 로직 변경
-  const columns: TableColumn<InventoryItem>[] = useMemo(() => [
+  // const columns: TableColumn<InventoryItem>[] = useMemo(() => [
+  const columns: TableColumn<UnifiedInventoryItem>[] = useMemo(() => [
     {
       key: 'item_code',
       label: '품목코드',
