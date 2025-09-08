@@ -426,6 +426,33 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
   const canEdit = request.status === 'submitted';
   const canApprove = request.status === 'PENDING_APPROVAL';
 
+  const renderWithLinks = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    return text.split(urlRegex).map((part, index) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a 
+            key={index} 
+            href={part} 
+            target="_blank" 
+            rel="noopener noreferrer"
+            style={{ 
+              color: '#f59e0b', 
+              textDecoration: 'underline',
+              fontWeight: '600',
+              transition: 'color 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.currentTarget.style.color = '#d97706'}
+            onMouseLeave={(e) => e.currentTarget.style.color = '#f59e0b'}
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <Modal
       isOpen={isOpen}
@@ -588,7 +615,7 @@ const RequestDetailModal: React.FC<RequestDetailModalProps> = ({
 </h3>
             </div>
             <div className="justification-content">
-              {request.justification}
+              {renderWithLinks(request.justification)}
             </div>
           </JustificationSection>
         )}
